@@ -2,131 +2,106 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <esp_now.h>
-#include <esp_wifi.h>
-
-#include "../common/esp_now_message.h"
+#include <WiFiUdp.h>
 
 namespace onboard_xiao {
 
-using fallout_event::BlinkCommand;
-using fallout_event::kEspNowChannel;
-using fallout_event::kProtocolMagic;
-
 constexpr uint32_t kUsbBaud = 115200;
-constexpr int kLedPin = D10;
+constexpr char kApSsid[] = "fallout-xiao-link";
+constexpr char kApPassword[] = "fallout123";
+constexpr uint16_t kCommandPort = 4210;
+constexpr uint16_t kAckPort = 4211;
+const IPAddress kOnboardIp(192, 168, 4, 2);
+const IPAddress kGatewayIp(192, 168, 4, 1);
+const IPAddress kSubnet(255, 255, 255, 0);
 
-portMUX_TYPE commandMux = portMUX_INITIALIZER_UNLOCKED;
-BlinkCommand pendingCommand = {};
-uint8_t pendingSourceMac[6] = {};
-volatile bool hasPendingCommand = false;
-bool ledIsOn = false;
-unsigned long ledOffAtMs = 0;
+WiFiUDP commandUdp;
+WiFiUDP ackUdp;
 uint32_t receivedMessages = 0;
 
-void setLed(bool enabled) {
-  ledIsOn = enabled;
-  digitalWrite(kLedPin, enabled ? HIGH : LOW);
+void printBanner() {
+  Serial.println();
+  Serial.println("Onboard XIAO ESP32-C3 ready");
+  Serial.println("Connected to fallout-xiao-link");
+  Serial.println("Waiting for UDP messages from the laptop-connected XIAO");
+  Serial.println("This board sends an ACK line back for each message.");
+  Serial.println("Local IP: " + WiFi.localIP().toString());
+  Serial.println("Gateway IP: " + WiFi.gatewayIP().toString());
+  Serial.println("Command port: 4210");
+  Serial.println("ACK port: 4211");
+  Serial.println();
 }
 
-void onDataRecv(const uint8_t *macAddr, const uint8_t *data, int len) {
-  if (len != static_cast<int>(sizeof(BlinkCommand))) {
-    return;
-  }
-
-  const BlinkCommand *incoming = reinterpret_cast<const BlinkCommand *>(data);
-  if (incoming->magic != kProtocolMagic) {
-    return;
-  }
-
-  portENTER_CRITICAL(&commandMux);
-  memcpy(&pendingCommand, incoming, sizeof(BlinkCommand));
-  memcpy(pendingSourceMac, macAddr, sizeof(pendingSourceMac));
-  hasPendingCommand = true;
-  portEXIT_CRITICAL(&commandMux);
-}
-
-bool initEspNow() {
+bool connectToLaptopAp() {
   WiFi.mode(WIFI_STA);
-  delay(100);
-
-  if (esp_wifi_set_channel(kEspNowChannel, WIFI_SECOND_CHAN_NONE) != ESP_OK) {
-    Serial.println("Failed to set WiFi channel");
+  if (!WiFi.config(kOnboardIp, kGatewayIp, kSubnet)) {
+    Serial.println("Failed to configure static IP");
     return false;
   }
 
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("ESP-NOW init failed");
-    return false;
+  WiFi.begin(kApSsid, kApPassword);
+  const unsigned long startedAtMs = millis();
+  while (WiFi.status() != WL_CONNECTED) {
+    if (millis() - startedAtMs > 15000) {
+      Serial.println("Timed out connecting to laptop AP");
+      return false;
+    }
+    delay(250);
   }
 
-  if (esp_now_register_recv_cb(onDataRecv) != ESP_OK) {
-    Serial.println("Failed to register receive callback");
+  if (!commandUdp.begin(kCommandPort)) {
+    Serial.println("Failed to open command UDP port");
     return false;
   }
 
   return true;
 }
 
-void handlePendingCommand() {
-  if (!hasPendingCommand) {
+void sendAck(const String &message) {
+  ackUdp.beginPacket(kGatewayIp, kAckPort);
+  ackUdp.print(message);
+  ackUdp.endPacket();
+}
+
+void pumpCommandInput() {
+  const int packetSize = commandUdp.parsePacket();
+  if (packetSize <= 0) {
     return;
   }
 
-  BlinkCommand command = {};
-  uint8_t sourceMac[6] = {};
+  String line;
+  while (commandUdp.available()) {
+    const char incoming = static_cast<char>(commandUdp.read());
+    if (incoming != '\r' && incoming != '\n') {
+      line += incoming;
+    }
+  }
 
-  portENTER_CRITICAL(&commandMux);
-  memcpy(&command, &pendingCommand, sizeof(BlinkCommand));
-  memcpy(sourceMac, pendingSourceMac, sizeof(sourceMac));
-  hasPendingCommand = false;
-  portEXIT_CRITICAL(&commandMux);
+  line.trim();
+  if (line.isEmpty()) {
+    return;
+  }
 
   receivedMessages++;
-  setLed(true);
-  ledOffAtMs = millis() + command.durationMs;
-
-  Serial.printf("[RECV #%lu] from %02X:%02X:%02X:%02X:%02X:%02X text=\"%s\" blink=%lums\n",
-                static_cast<unsigned long>(command.sequence),
-                sourceMac[0], sourceMac[1], sourceMac[2],
-                sourceMac[3], sourceMac[4], sourceMac[5],
-                command.text,
-                static_cast<unsigned long>(command.durationMs));
-}
-
-void serviceLedTimer() {
-  if (ledIsOn && millis() >= ledOffAtMs) {
-    setLed(false);
-    Serial.printf("[LED] OFF after message count=%lu\n", static_cast<unsigned long>(receivedMessages));
-  }
+  Serial.printf("[RECV #%lu] \"%s\"\n", static_cast<unsigned long>(receivedMessages), line.c_str());
+  sendAck("message #" + String(receivedMessages) + " received: " + line + "\n");
 }
 
 void setup() {
-  pinMode(kLedPin, OUTPUT);
-  setLed(false);
-
   Serial.begin(kUsbBaud);
   delay(250);
 
-  if (!initEspNow()) {
-    Serial.println("Rebooting in 5 seconds...");
+  if (!connectToLaptopAp()) {
+    Serial.println("WiFi link init failed; rebooting in 5 seconds...");
     delay(5000);
     ESP.restart();
   }
 
-  Serial.println();
-  Serial.println("Onboard XIAO ESP32-C3 ready");
-  Serial.println("Waiting for ESP-NOW blink commands from the laptop-connected XIAO");
-  Serial.println("LED output pin: D10");
-  Serial.println("WiFi mode: STA");
-  Serial.println("Channel: 6");
-  Serial.println("MAC: " + WiFi.macAddress());
-  Serial.println();
+  printBanner();
 }
 
 void loop() {
-  handlePendingCommand();
-  serviceLedTimer();
+  pumpCommandInput();
   delay(2);
 }
 

@@ -57,7 +57,7 @@
       "top": -182.4,
       "left": 246.8,
       "attrs": {
-        "text": "Onboard XIAO\\nreceives ESP-NOW and blinks LED"
+        "text": "Onboard XIAO\\nreceives ESP-NOW and blinks external LED on D10"
       }
     }
   ],

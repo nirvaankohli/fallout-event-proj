@@ -1,38 +1,42 @@
 # fallout-event-proj
 
-This repo now contains a two-board Arduino setup for ESP32-C3 devices:
+This repo contains a two-board wireless link for Seeed XIAO ESP32-C3 devices:
 
 - `code/laptop-xiao-esp32c3`
-  The XIAO ESP32-C3 connected to the laptop over USB. It reads a line from the computer on `Serial` and broadcasts it over ESP-NOW.
+  The XIAO connected to the laptop over USB. It starts a private Wi-Fi access point, reads lines from `Serial`, and sends each line to the onboard XIAO over UDP.
 - `code/onboard-xiao-esp32c3`
-  The onboard Seeed XIAO ESP32-C3. It receives ESP-NOW messages and turns an LED on for 1 second.
+  The onboard XIAO. It joins the laptop XIAO's private Wi-Fi network, receives UDP messages, and sends an ACK line back for each one.
 
 ## Hardware topology
 
-The communication path is:
+The working communication path is:
 
-`Computer -> USB Serial -> laptop-connected XIAO ESP32-C3 -> ESP-NOW -> onboard XIAO ESP32-C3`
+`Computer -> USB Serial -> laptop-connected XIAO -> private Wi-Fi link -> onboard XIAO -> ACK back over Wi-Fi`
 
-### Real hardware wiring
+No data wire is needed between the two boards.
 
-- No data wire is needed between the two XIAO boards for ESP-NOW.
-- Give both boards power.
-- Connect an LED and resistor to the onboard XIAO:
-  - `D10 -> resistor -> LED anode`
-  - `LED cathode -> GND`
+## Network details
 
-If both boards are powered by USB, that is enough for this example.
+- SSID: `fallout-xiao-link`
+- Password: `fallout123`
+- Laptop XIAO AP IP: `192.168.4.1`
+- Onboard XIAO STA IP: `192.168.4.2`
+- Command port: `4210`
+- ACK port: `4211`
 
 ## Commands
 
 Open the serial monitor for the laptop-connected XIAO at `115200` baud and send one line at a time:
 
 - `hello`
+- `status`
 - `open door`
-- `blink now`
-- any other short line
 
-Every line becomes one ESP-NOW packet. The onboard XIAO receives it and turns the LED on for `1000ms`.
+Expected result:
+
+- laptop XIAO prints `[SEND #...]`
+- onboard XIAO prints `[RECV #...]`
+- laptop XIAO prints `[ACK] message #... received: ...`
 
 ## Build with PlatformIO
 
@@ -47,19 +51,3 @@ Build them with:
 .venv/bin/platformio run -e laptop_xiao_esp32c3
 .venv/bin/platformio run -e onboard_xiao_esp32c3
 ```
-
-## Wokwi simulation
-
-The included [diagram.json](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/diagram.json) simulates both boards together:
-
-- XIAO ESP32-C3 as the laptop sender
-- XIAO ESP32-C3 as the onboard receiver
-- a green LED on onboard XIAO `D10` to show the 1-second blink
-
-Files used by the simulation:
-
-- [diagram.json](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/diagram.json)
-- [wokwi-laptop-xiao.ino](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/wokwi-laptop-xiao.ino)
-- [wokwi-xiao-onboard.ino](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/wokwi-xiao-onboard.ino)
-
-`wokwi.toml` is included for local Wokwi/VS Code setups that expect a root configuration file. The multi-board `diagram.json` itself uses per-board code assignments so each board runs its own sketch.
