@@ -1,0 +1,1 @@
+"""Facial detection FastAPI service."""
