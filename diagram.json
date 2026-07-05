@@ -4,71 +4,18 @@
   "editor": "wokwi",
   "parts": [
     {
-      "type": "board-xiao-esp32-c3",
-      "id": "laptopXiao",
-      "top": -48,
-      "left": -93,
+      "type": "wokwi-arduino-uno",
+      "id": "uno",
+      "top": -10,
+      "left": -10,
       "attrs": {
-        "macAddress": "24:0A:C4:00:01:11",
-        "code": "wokwi-laptop-xiao.ino"
-      }
-    },
-    {
-      "type": "board-xiao-esp32-c3",
-      "id": "onboardXiao",
-      "top": -22,
-      "left": 254,
-      "attrs": {
-        "macAddress": "24:0A:C4:00:01:12",
-        "code": "wokwi-xiao-onboard.ino"
-      }
-    },
-    {
-      "type": "wokwi-led",
-      "id": "statusLed",
-      "top": -97.6,
-      "left": 524.2,
-      "attrs": {
-        "color": "green"
-      }
-    },
-    {
-      "type": "wokwi-resistor",
-      "id": "statusResistor",
-      "top": -52.65,
-      "left": 487.2,
-      "rotate": 90,
-      "attrs": {
-        "value": "220"
-      }
-    },
-    {
-      "type": "wokwi-text",
-      "id": "note1",
-      "top": -198.4,
-      "left": -95,
-      "attrs": {
-        "text": "Laptop XIAO\\nserial input -> ESP-NOW sender"
-      }
-    },
-    {
-      "type": "wokwi-text",
-      "id": "note2",
-      "top": -182.4,
-      "left": 246.8,
-      "attrs": {
-        "text": "Onboard XIAO\\nreceives ESP-NOW and blinks external LED on D10"
+        "code": "src/main.cpp"
       }
     }
   ],
   "connections": [
-    [ "laptopXiao:TX", "$serialMonitor:RX", "", [] ],
-    [ "laptopXiao:RX", "$serialMonitor:TX", "", [] ],
-    [ "onboardXiao:TX", "$serialMonitor:RX", "", [] ],
-    [ "onboardXiao:RX", "$serialMonitor:TX", "", [] ],
-    [ "onboardXiao:D10", "statusResistor:1", "green", [ "h87.8", "v-48.4" ] ],
-    [ "statusResistor:2", "statusLed:A", "green", [ "v-9.6", "h27.2" ] ],
-    [ "statusLed:C", "onboardXiao:GND", "black", [ "h-14.4", "v130.6", "h-267.2" ] ]
+    [ "uno:TX", "$serialMonitor:RX", "", [] ],
+    [ "uno:RX", "$serialMonitor:TX", "", [] ]
   ],
   "serialMonitor": {
     "display": "terminal",
