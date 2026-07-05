@@ -19,6 +19,8 @@ constexpr uint8_t kRightDriveIn2Pin = 5;
 constexpr uint8_t kActivityLedPin = 6;
 constexpr uint8_t kSleepPin = 10;
 constexpr uint32_t kBootMotorTestStepMs = 700;
+constexpr bool kInvertLeftMotor = true;
+constexpr bool kInvertRightMotor = false;
 
 IPAddress kFallbackAccessPointIp(192, 168, 4, 1);
 IPAddress kFallbackAccessPointGateway(192, 168, 4, 1);
@@ -146,8 +148,12 @@ void applyDriveCommand(int left, int right, const char *source) {
   const bool anyMotorActive = motorState.left != 0 || motorState.right != 0;
   setDriverSleep(anyMotorActive);
   setActivityLed(anyMotorActive);
-  applyMotorPins(kLeftDriveIn1Pin, kLeftDriveIn2Pin, motorState.left);
-  applyMotorPins(kRightDriveIn1Pin, kRightDriveIn2Pin, motorState.right);
+  applyMotorPins(kLeftDriveIn1Pin,
+                 kLeftDriveIn2Pin,
+                 kInvertLeftMotor ? -motorState.left : motorState.left);
+  applyMotorPins(kRightDriveIn1Pin,
+                 kRightDriveIn2Pin,
+                 kInvertRightMotor ? -motorState.right : motorState.right);
 
   Serial.printf("[motor] %s left=%d right=%d sleep=%s\n",
                 source,
