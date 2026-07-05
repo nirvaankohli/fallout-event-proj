@@ -1,56 +1,93 @@
-# ESP32 Echo Link
+# XIAO ESP32-C3 Motor Controller
 
-This folder contains:
+This folder contains the firmware and browser controller for the DRV8833-driven dual-motor setup.
 
-- `main.cpp`: Arduino sketch for the ESP32-C3 that echoes lines back over USB serial and Wi-Fi.
-- `laptop_echo.py`: Laptop-side client for USB serial or Wi-Fi TCP.
+- `main.cpp`: XIAO ESP32-C3 firmware with Wi-Fi, WebSocket control, serial test commands, and safety timeout logic.
+- `web_controller.html`: Browser UI with two vertical joysticks for left/right tank drive.
+- `laptop_echo.py`: Legacy serial/TCP helper from the earlier echo phase. Serial mode still remains useful for quick manual commands, but the main UI is now `web_controller.html`.
 
-## Recommended wireless mode
+## Pin mapping
 
-The easiest setup is to put the ESP32 on the same Wi-Fi network as your laptop.
+The firmware follows the schematic labels exactly:
 
-Set these near the top of `main.cpp`:
+- `LeftDriveIn1` -> GPIO2 / D0
+- `LeftDriveIn2` -> GPIO3 / D1
+- `RightDriveIn1` -> GPIO4 / D2
+- `RightDriveIn2` -> GPIO5 / D3
+- `Sleep` -> GPIO10 / D10
 
-- `kWifiSsid`
-- `kWifiPassword`
+DRV8833 drive behavior:
 
-Then rebuild and upload. On boot, the ESP32 will connect to that Wi-Fi network and print its IP address over USB serial.
+- Forward: `IN1=HIGH`, `IN2=LOW`
+- Reverse: `IN1=LOW`, `IN2=HIGH`
+- Stop/coast: both inputs `LOW`
 
-After that, run:
+## Wi-Fi flow
 
-```bash
-python3 code/esp32code/laptop_echo.py --mode tcp --host ESP32_IP_HERE --tcp-port 3333
-```
+Preferred mode:
 
-## Fallback access point mode
+1. Set `kWifiSsid` and `kWifiPassword` in [main.cpp](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/main.cpp).
+2. Build and upload the firmware.
+3. Read the XIAO IP from the serial monitor.
+4. Open `web_controller.html` in a browser and point it at `ws://XIAO_IP:3333/`.
 
-If `kWifiSsid` is left blank or the Wi-Fi connection fails, the ESP32 creates its own Wi-Fi network:
+Fallback AP mode:
 
 - SSID: `FalloutESP32`
 - Password: none
-- ESP32 IP: `192.168.4.1`
-- TCP port: `3333`
+- XIAO IP: `192.168.4.1`
+- WebSocket URL: `ws://192.168.4.1:3333/`
 
-Connect your laptop to that Wi-Fi network, then run:
+If station Wi-Fi fails, the firmware automatically starts the fallback access point.
 
-```bash
-python3 code/esp32code/laptop_echo.py --mode tcp --host 192.168.4.1 --tcp-port 3333
+## WebSocket command format
+
+Browser clients send JSON messages:
+
+```json
+{"type":"drive","left":42,"right":-30}
+{"type":"stop"}
+{"type":"ping"}
 ```
 
-Type `ping` or any message and the ESP32 will echo it back.
+The XIAO replies with JSON status or error messages:
 
-## USB serial mode
-
-With the ESP32 plugged in over USB, serial echo still works at `115200` baud.
-
-## Laptop setup
-
-```bash
-python3 -m pip install pyserial
-python3 code/esp32code/laptop_echo.py --mode serial --port /dev/cu.usbmodem101
+```json
+{"type":"status","connected":true,"left":42,"right":-30,"reason":"drive"}
+{"type":"error","message":"invalid json"}
 ```
 
-If you omit `--port`, the script will try to auto-detect the ESP32 serial device on macOS.
+`left` and `right` are normalized to `-100..100`.
+
+## Serial test commands
+
+USB serial still works at `115200` baud and is useful for bench tests:
+
+```text
+ping
+wifi status
+drive 100 100
+drive 100 -100
+stop
+help
+```
+
+## Safety stop
+
+- The DRV8833 `SLEEP` pin is driven high only while a motor command is active.
+- Invalid WebSocket payloads force a safe stop.
+- If joystick updates stop arriving for about `300 ms`, both motors are stopped automatically.
+- If the WebSocket client disconnects, both motors are stopped automatically.
+
+## Browser controller
+
+Open [web_controller.html](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/web_controller.html) in a browser.
+
+- Left joystick drives only the left motor.
+- Right joystick drives only the right motor.
+- Up is forward, down is reverse.
+- Releasing a joystick returns that motor to zero.
+- The page shows connection state and the last status reason returned by the XIAO.
 
 ## Build and upload
 

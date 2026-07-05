@@ -1,22 +1,29 @@
 # fallout-event-proj
 
-This repo now contains a single bare-bones Arduino sketch with no ESP32, WiFi, or multi-board code.
+This repo now targets a `seeed_xiao_esp32c3` motor-control build for the Fallout event hardware.
 
-## Behavior
+## Current behavior
 
-- Starts `Serial` at `115200`
-- Prints a short startup message
-- Blinks the built-in LED once per second
-- Echoes anything you type into the serial monitor
-- If you send `blink`, it does one extra quick blink
+- Connects the XIAO ESP32-C3 to Wi‑Fi or starts a fallback access point
+- Exposes a WebSocket motor-control endpoint on port `3333`
+- Drives a DRV8833 dual H-bridge using the schematic pin mapping
+- Supports tank-drive commands where left and right values control the left and right motors independently
+- Includes a browser controller page with two virtual joysticks
+- Keeps a serial command interface for quick testing and diagnostics
+- Auto-stops the motors on disconnect, invalid payload, or command timeout
+
+## Main files
+
+- Firmware: [code/esp32code/main.cpp](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/main.cpp)
+- Browser controller: [code/esp32code/web_controller.html](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/web_controller.html)
+- Firmware docs: [code/esp32code/README.md](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/README.md)
 
 ## Build with PlatformIO
 
-The default PlatformIO environment is `uno`:
-
 ```bash
-.venv/bin/platformio run
-.venv/bin/platformio device monitor -b 115200
+python3 -m platformio run
+python3 -m platformio run --target upload --upload-port /dev/cu.usbmodem101
+python3 -m platformio device monitor -b 115200
 ```
 
-If you want a different Arduino-compatible board, update `board` in [platformio.ini](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/platformio.ini).
+Board and libraries are defined in [platformio.ini](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/platformio.ini).

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fallout Motor Control</title>
+    <style>
+      :root {
+        --bg: #f2ede4;
+        --panel: rgba(255, 251, 245, 0.86);
+        --ink: #17353a;
+        --accent: #bf5f3c;
+        --accent-strong: #8f341a;
+        --line: rgba(23, 53, 58, 0.14);
+        --good: #2f8f5b;
+        --bad: #ad3b2e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(191, 95, 60, 0.18), transparent 35%),
+          linear-gradient(180deg, #f7f2e9 0%, #e8ddd0 100%);
+      }
+
+      main {
+        
+        width: min(1100px, calc(100vw - 32px));
+        margin: 24px auto;
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: var(--panel);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 24px 80px rgba(61, 41, 21, 0.14);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(2rem, 4vw, 3.8rem);
+        line-height: 0.95;
+        letter-spacing: -0.04em;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      .topbar {
+        display: grid;
+        gap: 16px;
+      }
+
+      .connection {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        margin-top: 18px;
+      }
+
+      input,
+      button {
+        font: inherit;
+      }
+
+      input {
+        min-width: min(360px, 100%);
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.84);
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        color: #fff8f2;
+        background: var(--accent);
+        cursor: pointer;
+      }
+
+      button.secondary {
+        background: var(--ink);
+      }
+
+      .status-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        margin-top: 18px;
+        font-size: 0.95rem;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #8f8f8f;
+      }
+
+      .dot.connected {
+        background: var(--good);
+      }
+
+      .dot.disconnected {
+        background: var(--bad);
+      }
+
+      .controllers {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(260px, 1fr));
+        gap: 24px;
+        margin-top: 30px;
+      }
+
+      .joystick-card {
+        padding: 20px;
+        border-radius: 24px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.62);
+      }
+
+      .joystick-card h2 {
+        margin: 0 0 8px;
+        font-size: 1.2rem;
+      }
+
+      .pad {
+        position: relative;
+        width: min(100%, 320px);
+        aspect-ratio: 1;
+        margin: 18px auto 12px;
+        border-radius: 32px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(232, 221, 208, 0.82)),
+          linear-gradient(90deg, rgba(23, 53, 58, 0.08), rgba(23, 53, 58, 0.02));
+        border: 1px solid rgba(23, 53, 58, 0.1);
+        touch-action: none;
+        overflow: hidden;
+      }
+
+      .pad::before,
+      .pad::after {
+        content: "";
+        position: absolute;
+        inset: 50% auto auto 50%;
+        background: rgba(23, 53, 58, 0.12);
+        transform: translate(-50%, -50%);
+      }
+
+      .pad::before {
+        width: calc(100% - 28px);
+        height: 1px;
+      }
+
+      .pad::after {
+        width: 1px;
+        height: calc(100% - 28px);
+      }
+
+      .knob {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 84px;
+        height: 84px;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 30% 30%, #fef7f1, #d96d44 55%, #8f341a 100%);
+        transform: translate(-50%, -50%);
+        box-shadow: 0 12px 24px rgba(143, 52, 26, 0.28);
+      }
+
+      .value {
+        font-size: 1rem;
+        text-align: center;
+      }
+
+      .hint {
+        margin-top: 24px;
+        color: rgba(23, 53, 58, 0.72);
+        font-size: 0.95rem;
+      }
+
+      @media (max-width: 760px) {
+        .controllers {
+          grid-template-columns: 1fr;
+        }
+
+        input {
+          min-width: 0;
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="topbar">
+        <div>
+          <h1>Fallout Dual Drive</h1>
+          <p>Left joystick controls the left motor. Right joystick controls the right motor.</p>
+        </div>
+
+        <div class="connection">
+          <input id="ws-url" type="text" value="ws://192.168.4.1:3333/" aria-label="WebSocket URL" />
+          <button id="connect-btn">Connect</button>
+          <button id="stop-btn" class="secondary">Stop</button>
+        </div>
+
+        <div class="status-row">
+          <div class="pill"><span id="status-dot" class="dot disconnected"></span><span id="status-text">Disconnected</span></div>
+          <div class="pill">Last status: <strong id="status-reason">idle</strong></div>
+          <div class="pill">Left: <strong id="left-readout">0</strong></div>
+          <div class="pill">Right: <strong id="right-readout">0</strong></div>
+        </div>
+      </section>
+
+      <section class="controllers">
+        <article class="joystick-card">
+          <h2>Left Motor</h2>
+          <div id="left-pad" class="pad" data-side="left">
+            <div class="knob"></div>
+          </div>
+          <div class="value">Command: <strong id="left-value">0</strong></div>
+        </article>
+
+        <article class="joystick-card">
+          <h2>Right Motor</h2>
+          <div id="right-pad" class="pad" data-side="right">
+            <div class="knob"></div>
+          </div>
+          <div class="value">Command: <strong id="right-value">0</strong></div>
+        </article>
+      </section>
+
+      <p class="hint">
+        Drag up for forward, drag down for reverse. Releasing either joystick recenters that motor to zero and sends a stop update.
+      </p>
+    </main>
+
+    <script>
+      const state = {
+        left: 0,
+        right: 0,
+        socket: null,
+        pads: {}
+      };
+
+      const elements = {
+        wsUrl: document.getElementById("ws-url"),
+        connectBtn: document.getElementById("connect-btn"),
+        stopBtn: document.getElementById("stop-btn"),
+        statusDot: document.getElementById("status-dot"),
+        statusText: document.getElementById("status-text"),
+        statusReason: document.getElementById("status-reason"),
+        leftValue: document.getElementById("left-value"),
+        rightValue: document.getElementById("right-value"),
+        leftReadout: document.getElementById("left-readout"),
+        rightReadout: document.getElementById("right-readout")
+      };
+
+      function setConnectionState(connected, message) {
+        elements.statusDot.className = `dot ${connected ? "connected" : "disconnected"}`;
+        elements.statusText.textContent = connected ? "Connected" : "Disconnected";
+        elements.statusReason.textContent = message;
+      }
+
+      function updateReadouts() {
+        elements.leftValue.textContent = String(state.left);
+        elements.rightValue.textContent = String(state.right);
+      }
+
+      function updateStatusReadouts(left, right) {
+        elements.leftReadout.textContent = String(left);
+        elements.rightReadout.textContent = String(right);
+      }
+
+      function sendJson(payload) {
+        if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+          return;
+        }
+        state.socket.send(JSON.stringify(payload));
+      }
+
+      function sendDrive() {
+        sendJson({ type: "drive", left: state.left, right: state.right });
+      }
+
+      function stopAll() {
+        state.left = 0;
+        state.right = 0;
+        updateReadouts();
+        centerAllPads();
+        sendJson({ type: "stop" });
+      }
+
+      function connectWebSocket() {
+        if (state.socket) {
+          state.socket.close();
+        }
+
+        const url = elements.wsUrl.value.trim();
+        const socket = new WebSocket(url);
+        state.socket = socket;
+        setConnectionState(false, "connecting");
+
+        socket.addEventListener("open", () => {
+          setConnectionState(true, "connected");
+          sendJson({ type: "ping" });
+        });
+
+        socket.addEventListener("close", () => {
+          setConnectionState(false, "socket closed");
+        });
+
+        socket.addEventListener("error", () => {
+          setConnectionState(false, "socket error");
+        });
+
+        socket.addEventListener("message", (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === "status") {
+              updateStatusReadouts(payload.left ?? 0, payload.right ?? 0);
+              elements.statusReason.textContent = payload.reason ?? "status";
+            } else if (payload.type === "error") {
+              elements.statusReason.textContent = payload.message ?? "error";
+            }
+          } catch (error) {
+            elements.statusReason.textContent = "bad response";
+          }
+        });
+      }
+
+      function centerPad(side) {
+        const padState = state.pads[side];
+        if (!padState) {
+          return;
+        }
+        padState.knob.style.left = "50%";
+        padState.knob.style.top = "50%";
+      }
+
+      function centerAllPads() {
+        centerPad("left");
+        centerPad("right");
+      }
+
+      function updateSide(side, event) {
+        const padState = state.pads[side];
+        if (!padState) {
+          return;
+        }
+
+        const rect = padState.pad.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const limit = rect.height / 2 - 42;
+
+        const clampedY = Math.max(-limit, Math.min(limit, y - centerY));
+        const knobY = centerY + clampedY;
+        padState.knob.style.left = `${centerX}px`;
+        padState.knob.style.top = `${knobY}px`;
+
+        const normalized = Math.round((-clampedY / limit) * 100);
+        state[side] = Math.max(-100, Math.min(100, normalized));
+        updateReadouts();
+        sendDrive();
+      }
+
+      function releaseSide(side) {
+        state[side] = 0;
+        updateReadouts();
+        centerPad(side);
+        sendDrive();
+      }
+
+      function bindPad(side, padId) {
+        const pad = document.getElementById(padId);
+        const knob = pad.querySelector(".knob");
+        state.pads[side] = { pad, knob };
+
+        let pointerId = null;
+
+        pad.addEventListener("pointerdown", (event) => {
+          pointerId = event.pointerId;
+          pad.setPointerCapture(pointerId);
+          updateSide(side, event);
+        });
+
+        pad.addEventListener("pointermove", (event) => {
+          if (pointerId !== event.pointerId) {
+            return;
+          }
+          updateSide(side, event);
+        });
+
+        const release = (event) => {
+          if (pointerId !== event.pointerId) {
+            return;
+          }
+          pointerId = null;
+          releaseSide(side);
+        };
+
+        pad.addEventListener("pointerup", release);
+        pad.addEventListener("pointercancel", release);
+        pad.addEventListener("lostpointercapture", () => {
+          pointerId = null;
+          releaseSide(side);
+        });
+      }
+
+      elements.connectBtn.addEventListener("click", connectWebSocket);
+      elements.stopBtn.addEventListener("click", stopAll);
+      window.addEventListener("beforeunload", () => {
+        stopAll();
+        if (state.socket) {
+          state.socket.close();
+        }
+      });
+
+      bindPad("left", "left-pad");
+      bindPad("right", "right-pad");
+      updateReadouts();
+      updateStatusReadouts(0, 0);
+    </script>
+  </body>
+</html>
