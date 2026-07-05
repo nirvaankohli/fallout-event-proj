@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Simple laptop client for the ESP32 USB serial or Wi-Fi echo server."""
 
 from __future__ import annotations
 

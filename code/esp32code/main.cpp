@@ -1,21 +1,37 @@
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <WiFi.h>
+#include <WebSocketsServer.h>
 
 namespace {
 
 constexpr uint32_t kBaudRate = 115200;
-constexpr uint16_t kWifiPort = 3333;
+constexpr uint16_t kWebSocketPort = 3333;
+constexpr uint32_t kCommandTimeoutMs = 300;
 constexpr char kWifiSsid[] = "Nirvaan's Phone";
 constexpr char kWifiPassword[] = "himynameisnirvaan";
 constexpr char kFallbackAccessPointSsid[] = "FalloutESP32";
 constexpr uint8_t kFallbackAccessPointChannel = 6;
+constexpr uint8_t kLeftDriveIn1Pin = 2;
+constexpr uint8_t kLeftDriveIn2Pin = 3;
+constexpr uint8_t kRightDriveIn1Pin = 4;
+constexpr uint8_t kRightDriveIn2Pin = 5;
+constexpr uint8_t kSleepPin = 10;
+
 IPAddress kFallbackAccessPointIp(192, 168, 4, 1);
 IPAddress kFallbackAccessPointGateway(192, 168, 4, 1);
 IPAddress kFallbackAccessPointSubnet(255, 255, 255, 0);
 
-WiFiServer wifiServer(kWifiPort);
-WiFiClient wifiClient;
+WebSocketsServer webSocketServer(kWebSocketPort);
 bool wifiReady = false;
+bool timeoutStopReported = false;
+uint8_t activeClientCount = 0;
+
+struct MotorState {
+  int left = 0;
+  int right = 0;
+  uint32_t lastCommandAtMs = 0;
+} motorState;
 
 String readLineFrom(Stream &stream) {
   static String buffer;
@@ -39,16 +55,150 @@ String readLineFrom(Stream &stream) {
   return "";
 }
 
+int clampCommand(int value) {
+  return constrain(value, -100, 100);
+}
+
+void setDriverSleep(bool enabled) {
+  digitalWrite(kSleepPin, enabled ? HIGH : LOW);
+}
+
+void applyMotorPins(uint8_t in1Pin, uint8_t in2Pin, int command) {
+  if (command > 0) {
+    digitalWrite(in1Pin, HIGH);
+    digitalWrite(in2Pin, LOW);
+    return;
+  }
+
+  if (command < 0) {
+    digitalWrite(in1Pin, LOW);
+    digitalWrite(in2Pin, HIGH);
+    return;
+  }
+
+  digitalWrite(in1Pin, LOW);
+  digitalWrite(in2Pin, LOW);
+}
+
+String buildStatusJson(const char *reason = nullptr) {
+  JsonDocument response;
+  response["type"] = "status";
+  response["connected"] = activeClientCount > 0;
+  response["left"] = motorState.left;
+  response["right"] = motorState.right;
+  if (reason != nullptr) {
+    response["reason"] = reason;
+  }
+
+  String message;
+  serializeJson(response, message);
+  return message;
+}
+
+String buildErrorJson(const char *messageText) {
+  JsonDocument response;
+  response["type"] = "error";
+  response["message"] = messageText;
+
+  String message;
+  serializeJson(response, message);
+  return message;
+}
+
+void broadcastStatus(const char *reason = nullptr) {
+  String message = buildStatusJson(reason);
+  webSocketServer.broadcastTXT(message);
+}
+
+void sendStatusToClient(uint8_t clientNumber, const char *reason = nullptr) {
+  String message = buildStatusJson(reason);
+  webSocketServer.sendTXT(clientNumber, message);
+}
+
+void sendErrorToClient(uint8_t clientNumber, const char *messageText) {
+  String message = buildErrorJson(messageText);
+  webSocketServer.sendTXT(clientNumber, message);
+}
+
+void stopAllMotors(const char *reason) {
+  motorState.left = 0;
+  motorState.right = 0;
+  applyMotorPins(kLeftDriveIn1Pin, kLeftDriveIn2Pin, 0);
+  applyMotorPins(kRightDriveIn1Pin, kRightDriveIn2Pin, 0);
+  setDriverSleep(false);
+  timeoutStopReported = false;
+  Serial.printf("[motor] stop reason=%s\n", reason);
+}
+
+void applyDriveCommand(int left, int right, const char *source) {
+  motorState.left = clampCommand(left);
+  motorState.right = clampCommand(right);
+  motorState.lastCommandAtMs = millis();
+  timeoutStopReported = false;
+
+  const bool anyMotorActive = motorState.left != 0 || motorState.right != 0;
+  setDriverSleep(anyMotorActive);
+  applyMotorPins(kLeftDriveIn1Pin, kLeftDriveIn2Pin, motorState.left);
+  applyMotorPins(kRightDriveIn1Pin, kRightDriveIn2Pin, motorState.right);
+
+  Serial.printf("[motor] %s left=%d right=%d sleep=%s\n",
+                source,
+                motorState.left,
+                motorState.right,
+                anyMotorActive ? "HIGH" : "LOW");
+}
+
+void configureMotorPins() {
+  pinMode(kLeftDriveIn1Pin, OUTPUT);
+  pinMode(kLeftDriveIn2Pin, OUTPUT);
+  pinMode(kRightDriveIn1Pin, OUTPUT);
+  pinMode(kRightDriveIn2Pin, OUTPUT);
+  pinMode(kSleepPin, OUTPUT);
+  stopAllMotors("boot");
+}
+
 void printHelp(Stream &stream) {
   stream.println("Commands:");
   stream.println("  ping");
   stream.println("  wifi status");
+  stream.println("  drive <left:-100..100> <right:-100..100>");
+  stream.println("  stop");
   stream.println("  help");
-  stream.println("Any other text is echoed back.");
 }
 
-void handleMessage(const String &message, Stream &replyStream, const char *channelName) {
-  if (message.length() == 0) {
+void reportWifiStatus(Stream &stream, const char *channelName) {
+  if (!wifiReady) {
+    stream.printf("[%s] wifi not ready\n", channelName);
+    return;
+  }
+
+  if (WiFi.getMode() == WIFI_STA && WiFi.status() == WL_CONNECTED) {
+    stream.printf("[%s] wifi station ssid=%s ip=%s ws_port=%u\n",
+                  channelName,
+                  WiFi.SSID().c_str(),
+                  WiFi.localIP().toString().c_str(),
+                  kWebSocketPort);
+    return;
+  }
+
+  stream.printf("[%s] wifi ap ssid=%s ip=%s ws_port=%u\n",
+                channelName,
+                kFallbackAccessPointSsid,
+                WiFi.softAPIP().toString().c_str(),
+                kWebSocketPort);
+}
+
+bool parseDriveLine(const String &message, int &left, int &right) {
+  if (!message.startsWith("drive ")) {
+    return false;
+  }
+
+  const int parsedCount = sscanf(message.c_str(), "drive %d %d", &left, &right);
+  return parsedCount == 2;
+}
+
+void handleSerialMessage(const String &message, Stream &replyStream, const char *channelName) {
+  if (message.isEmpty()) {
     return;
   }
 
@@ -58,16 +208,7 @@ void handleMessage(const String &message, Stream &replyStream, const char *chann
   }
 
   if (message == "wifi status") {
-    if (WiFi.status() == WL_CONNECTED) {
-      replyStream.printf(
-          "[%s] wifi connected ssid=%s ip=%s port=%u\n",
-          channelName,
-          WiFi.SSID().c_str(),
-          WiFi.localIP().toString().c_str(),
-          kWifiPort);
-    } else {
-      replyStream.printf("[%s] wifi disabled or disconnected\n", channelName);
-    }
+    reportWifiStatus(replyStream, channelName);
     return;
   }
 
@@ -76,14 +217,38 @@ void handleMessage(const String &message, Stream &replyStream, const char *chann
     return;
   }
 
-  replyStream.printf("[%s] echo: %s\n", channelName, message.c_str());
+  if (message == "stop") {
+    stopAllMotors("serial stop");
+    replyStream.printf("[%s] %s\n", channelName, buildStatusJson("serial-stop").c_str());
+    broadcastStatus("serial-stop");
+    return;
+  }
+
+  int left = 0;
+  int right = 0;
+  if (parseDriveLine(message, left, right)) {
+    applyDriveCommand(left, right, "serial");
+    replyStream.printf("[%s] %s\n", channelName, buildStatusJson("serial-drive").c_str());
+    broadcastStatus("serial-drive");
+    return;
+  }
+
+  stopAllMotors("serial invalid");
+  replyStream.printf("[%s] %s\n", channelName, buildErrorJson("invalid serial command").c_str());
+  broadcastStatus("invalid-command");
+}
+
+void startWebSocketServer() {
+  webSocketServer.begin();
+  webSocketServer.enableHeartbeat(15000, 3000, 2);
+  Serial.printf("[boot] WebSocket server listening on port %u\n", kWebSocketPort);
 }
 
 void startWifiAccessPoint() {
   WiFi.mode(WIFI_AP);
   const bool configOk =
       WiFi.softAPConfig(kFallbackAccessPointIp, kFallbackAccessPointGateway, kFallbackAccessPointSubnet);
-  const bool started = WiFi.softAP(kFallbackAccessPointSsid, nullptr, kFallbackAccessPointChannel, 0, 1);
+  const bool started = WiFi.softAP(kFallbackAccessPointSsid, nullptr, kFallbackAccessPointChannel, 0, 2);
   if (!configOk) {
     Serial.println("[boot] Failed to configure Wi-Fi access point IP.");
   }
@@ -92,17 +257,15 @@ void startWifiAccessPoint() {
     return;
   }
 
-  wifiServer.begin();
-  wifiServer.setNoDelay(true);
   wifiReady = true;
+  startWebSocketServer();
 
   Serial.printf("[boot] Fallback Wi-Fi AP ready. SSID=%s security=open channel=%u\n",
                 kFallbackAccessPointSsid,
                 kFallbackAccessPointChannel);
-  Serial.printf("[boot] Connect laptop to %s and open %s:%u\n",
-                kFallbackAccessPointSsid,
+  Serial.printf("[boot] Open WebSocket ws://%s:%u/\n",
                 WiFi.softAPIP().toString().c_str(),
-                kWifiPort);
+                kWebSocketPort);
 }
 
 void startWifiStation() {
@@ -131,43 +294,117 @@ void startWifiStation() {
     return;
   }
 
-  wifiServer.begin();
-  wifiServer.setNoDelay(true);
   wifiReady = true;
+  startWebSocketServer();
 
-  Serial.printf("[boot] Wi-Fi station connected. SSID=%s ip=%s port=%u\n",
+  Serial.printf("[boot] Wi-Fi station connected. SSID=%s ip=%s ws_port=%u\n",
                 kWifiSsid,
                 WiFi.localIP().toString().c_str(),
-                kWifiPort);
+                kWebSocketPort);
 }
 
-void maintainWifiClient() {
-  if (!wifiReady) {
+bool handleWebSocketJson(const String &message, uint8_t clientNumber) {
+  JsonDocument payload;
+  const DeserializationError error = deserializeJson(payload, message);
+  if (error) {
+    sendErrorToClient(clientNumber, "invalid json");
+    stopAllMotors("invalid json");
+    broadcastStatus("invalid-json");
+    return false;
+  }
+
+  const char *type = payload["type"];
+  if (type == nullptr) {
+    sendErrorToClient(clientNumber, "missing type");
+    stopAllMotors("missing type");
+    broadcastStatus("invalid-command");
+    return false;
+  }
+
+  if (strcmp(type, "drive") == 0) {
+    if (!payload["left"].is<int>() || !payload["right"].is<int>()) {
+      sendErrorToClient(clientNumber, "drive requires integer left/right");
+      stopAllMotors("invalid drive payload");
+      broadcastStatus("invalid-drive");
+      return false;
+    }
+
+    applyDriveCommand(payload["left"].as<int>(), payload["right"].as<int>(), "websocket");
+    broadcastStatus("drive");
+    return true;
+  }
+
+  if (strcmp(type, "stop") == 0) {
+    stopAllMotors("websocket stop");
+    broadcastStatus("stop");
+    return true;
+  }
+
+  if (strcmp(type, "ping") == 0) {
+    sendStatusToClient(clientNumber, "pong");
+    return true;
+  }
+
+  sendErrorToClient(clientNumber, "unknown command type");
+  stopAllMotors("unknown command");
+  broadcastStatus("invalid-command");
+  return false;
+}
+
+void handleWebSocketEvent(uint8_t clientNumber, WStype_t type, uint8_t *payload, size_t length) {
+  switch (type) {
+    case WStype_CONNECTED: {
+      activeClientCount++;
+      IPAddress ip = webSocketServer.remoteIP(clientNumber);
+      Serial.printf("[wifi] websocket client %u connected from %s active=%u\n",
+                    clientNumber,
+                    ip.toString().c_str(),
+                    activeClientCount);
+      sendStatusToClient(clientNumber, "connected");
+      break;
+    }
+
+    case WStype_DISCONNECTED: {
+      if (activeClientCount > 0) {
+        activeClientCount--;
+      }
+      Serial.printf("[wifi] websocket client %u disconnected active=%u\n", clientNumber, activeClientCount);
+      stopAllMotors("client disconnected");
+      broadcastStatus("client-disconnected");
+      break;
+    }
+
+    case WStype_TEXT: {
+      String message;
+      message.reserve(length);
+      for (size_t index = 0; index < length; ++index) {
+        message += static_cast<char>(payload[index]);
+      }
+      message.trim();
+      Serial.printf("[wifi] rx client=%u payload=%s\n", clientNumber, message.c_str());
+      handleWebSocketJson(message, clientNumber);
+      break;
+    }
+
+    default:
+      break;
+  }
+}
+
+void maintainSafetyTimeout() {
+  const bool anyMotorActive = motorState.left != 0 || motorState.right != 0;
+  if (!anyMotorActive) {
     return;
   }
 
-  if (!wifiClient || !wifiClient.connected()) {
-    WiFiClient newClient = wifiServer.available();
-    if (newClient) {
-      wifiClient.stop();
-      wifiClient = newClient;
-      wifiClient.setTimeout(10);
-      wifiClient.println("[wifi] connected to ESP32 echo server");
-      wifiClient.println("[wifi] send 'ping' or any line of text");
-      Serial.printf("[wifi] client connected from %s\n", wifiClient.remoteIP().toString().c_str());
-    }
+  if (millis() - motorState.lastCommandAtMs <= kCommandTimeoutMs) {
     return;
   }
 
-  while (wifiClient.available() > 0) {
-    const String line = wifiClient.readStringUntil('\n');
-    const String trimmed = line.substring(0, line.length());
-    String message = trimmed;
-    message.trim();
-    handleMessage(message, wifiClient, "wifi");
-    if (message.length() > 0) {
-      Serial.printf("[wifi] rx: %s\n", message.c_str());
-    }
+  stopAllMotors("command timeout");
+  if (!timeoutStopReported) {
+    broadcastStatus("timeout");
+    timeoutStopReported = true;
   }
 }
 
@@ -182,18 +419,24 @@ void setup() {
   }
 
   Serial.println();
-  Serial.println("[boot] ESP32 echo bridge starting");
+  Serial.println("[boot] XIAO ESP32-C3 motor controller starting");
   Serial.printf("[boot] USB serial ready at %lu baud\n", static_cast<unsigned long>(kBaudRate));
-  printHelp(Serial);
 
+  configureMotorPins();
+  printHelp(Serial);
   startWifiStation();
+  webSocketServer.onEvent(handleWebSocketEvent);
 }
 
 void loop() {
   const String serialMessage = readLineFrom(Serial);
   if (serialMessage.length() > 0) {
-    handleMessage(serialMessage, Serial, "usb");
+    handleSerialMessage(serialMessage, Serial, "usb");
   }
 
-  maintainWifiClient();
+  if (wifiReady) {
+    webSocketServer.loop();
+  }
+
+  maintainSafetyTimeout();
 }
