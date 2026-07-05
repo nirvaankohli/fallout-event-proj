@@ -19,7 +19,7 @@ This repo now targets a `seeed_xiao_esp32c3` motor-control build for the Fallout
 - Firmware docs: [code/esp32code/README.md](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/README.md)
 
 ## Build with PlatformIO
-
+(for mac)
 ```bash
 python3 -m platformio run
 python3 -m platformio run --target upload --upload-port /dev/cu.usbmodem101
