@@ -16,6 +16,7 @@ constexpr uint8_t kLeftDriveIn1Pin = 2;
 constexpr uint8_t kLeftDriveIn2Pin = 3;
 constexpr uint8_t kRightDriveIn1Pin = 4;
 constexpr uint8_t kRightDriveIn2Pin = 5;
+constexpr uint8_t kActivityLedPin = 6;
 constexpr uint8_t kSleepPin = 10;
 
 IPAddress kFallbackAccessPointIp(192, 168, 4, 1);
@@ -61,6 +62,10 @@ int clampCommand(int value) {
 
 void setDriverSleep(bool enabled) {
   digitalWrite(kSleepPin, enabled ? HIGH : LOW);
+}
+
+void setActivityLed(bool enabled) {
+  digitalWrite(kActivityLedPin, enabled ? HIGH : LOW);
 }
 
 void applyMotorPins(uint8_t in1Pin, uint8_t in2Pin, int command) {
@@ -126,6 +131,7 @@ void stopAllMotors(const char *reason) {
   applyMotorPins(kLeftDriveIn1Pin, kLeftDriveIn2Pin, 0);
   applyMotorPins(kRightDriveIn1Pin, kRightDriveIn2Pin, 0);
   setDriverSleep(false);
+  setActivityLed(false);
   timeoutStopReported = false;
   Serial.printf("[motor] stop reason=%s\n", reason);
 }
@@ -138,6 +144,7 @@ void applyDriveCommand(int left, int right, const char *source) {
 
   const bool anyMotorActive = motorState.left != 0 || motorState.right != 0;
   setDriverSleep(anyMotorActive);
+  setActivityLed(anyMotorActive);
   applyMotorPins(kLeftDriveIn1Pin, kLeftDriveIn2Pin, motorState.left);
   applyMotorPins(kRightDriveIn1Pin, kRightDriveIn2Pin, motorState.right);
 
@@ -153,6 +160,7 @@ void configureMotorPins() {
   pinMode(kLeftDriveIn2Pin, OUTPUT);
   pinMode(kRightDriveIn1Pin, OUTPUT);
   pinMode(kRightDriveIn2Pin, OUTPUT);
+  pinMode(kActivityLedPin, OUTPUT);
   pinMode(kSleepPin, OUTPUT);
   stopAllMotors("boot");
 }

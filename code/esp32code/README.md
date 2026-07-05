@@ -14,6 +14,7 @@ The firmware follows the schematic labels exactly:
 - `LeftDriveIn2` -> GPIO3 / D1
 - `RightDriveIn1` -> GPIO4 / D2
 - `RightDriveIn2` -> GPIO5 / D3
+- `Activity LED` -> GPIO6 / D4
 - `Sleep` -> GPIO10 / D10
 
 DRV8833 drive behavior:
@@ -75,6 +76,7 @@ help
 ## Safety stop
 
 - The DRV8833 `SLEEP` pin is driven high only while a motor command is active.
+- GPIO6 is driven high at the same time, so an external LED can indicate active joystick motion.
 - Invalid WebSocket payloads force a safe stop.
 - If joystick updates stop arriving for about `300 ms`, both motors are stopped automatically.
 - If the WebSocket client disconnects, both motors are stopped automatically.
