@@ -64,25 +64,34 @@ def run_serial_mode(port: str | None, baud: int) -> int:
 
 def run_tcp_mode(host: str, port: int) -> int:
     print(f"Opening TCP connection to {host}:{port}")
-    with socket.create_connection((host, port), timeout=5) as sock:
-        reader = sock.makefile("r", encoding="utf-8", newline="\n")
-        print("Type text and press Enter. Ctrl+C to quit.")
-        try:
-            while True:
-                outgoing = input("> ").strip()
-                if not outgoing:
-                    continue
+    try:
+        with socket.create_connection((host, port), timeout=5) as sock:
+            reader = sock.makefile("r", encoding="utf-8", newline="\n")
+            print("Type text and press Enter. Ctrl+C to quit.")
+            try:
+                while True:
+                    outgoing = input("> ").strip()
+                    if not outgoing:
+                        continue
 
-                sock.sendall((outgoing + "\n").encode("utf-8"))
-                incoming = reader.readline().strip()
-                if incoming:
-                    print(f"ESP32: {incoming}")
-                else:
-                    print("ESP32: connection closed")
-                    return 1
-        except KeyboardInterrupt:
-            print("\nClosing TCP connection")
-            return 0
+                    sock.sendall((outgoing + "\n").encode("utf-8"))
+                    incoming = reader.readline().strip()
+                    if incoming:
+                        print(f"ESP32: {incoming}")
+                    else:
+                        print("ESP32: connection closed")
+                        return 1
+            except KeyboardInterrupt:
+                print("\nClosing TCP connection")
+                return 0
+    except OSError as exc:
+        if exc.errno == 51:
+            print("Network is unreachable.")
+            print("Join the ESP32 Wi-Fi network 'Fallout-ESP32-Echo' first, then retry.")
+            print(f"After joining, connect again to {host}:{port}.")
+            return 2
+
+        raise
 
 
 def parse_args() -> argparse.Namespace:

@@ -5,8 +5,13 @@ namespace {
 
 constexpr uint32_t kBaudRate = 115200;
 constexpr uint16_t kWifiPort = 3333;
-constexpr char kAccessPointSsid[] = "Fallout-ESP32-Echo";
-constexpr char kAccessPointPassword[] = "fallout123";
+constexpr char kWifiSsid[] = "Nirvaan's Phone";
+constexpr char kWifiPassword[] = "himynameisnirvaan";
+constexpr char kFallbackAccessPointSsid[] = "FalloutESP32";
+constexpr uint8_t kFallbackAccessPointChannel = 6;
+IPAddress kFallbackAccessPointIp(192, 168, 4, 1);
+IPAddress kFallbackAccessPointGateway(192, 168, 4, 1);
+IPAddress kFallbackAccessPointSubnet(255, 255, 255, 0);
 
 WiFiServer wifiServer(kWifiPort);
 WiFiClient wifiClient;
@@ -76,7 +81,12 @@ void handleMessage(const String &message, Stream &replyStream, const char *chann
 
 void startWifiAccessPoint() {
   WiFi.mode(WIFI_AP);
-  const bool started = WiFi.softAP(kAccessPointSsid, kAccessPointPassword);
+  const bool configOk =
+      WiFi.softAPConfig(kFallbackAccessPointIp, kFallbackAccessPointGateway, kFallbackAccessPointSubnet);
+  const bool started = WiFi.softAP(kFallbackAccessPointSsid, nullptr, kFallbackAccessPointChannel, 0, 1);
+  if (!configOk) {
+    Serial.println("[boot] Failed to configure Wi-Fi access point IP.");
+  }
   if (!started) {
     Serial.println("[boot] Failed to start Wi-Fi access point.");
     return;
@@ -86,10 +96,48 @@ void startWifiAccessPoint() {
   wifiServer.setNoDelay(true);
   wifiReady = true;
 
-  Serial.printf("[boot] Wi-Fi AP ready. SSID=%s password=%s\n", kAccessPointSsid, kAccessPointPassword);
+  Serial.printf("[boot] Fallback Wi-Fi AP ready. SSID=%s security=open channel=%u\n",
+                kFallbackAccessPointSsid,
+                kFallbackAccessPointChannel);
   Serial.printf("[boot] Connect laptop to %s and open %s:%u\n",
-                kAccessPointSsid,
+                kFallbackAccessPointSsid,
                 WiFi.softAPIP().toString().c_str(),
+                kWifiPort);
+}
+
+void startWifiStation() {
+  if (strlen(kWifiSsid) == 0) {
+    Serial.println("[boot] No station Wi-Fi credentials configured.");
+    startWifiAccessPoint();
+    return;
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.begin(kWifiSsid, kWifiPassword);
+
+  Serial.printf("[boot] Connecting to Wi-Fi SSID=%s\n", kWifiSsid);
+
+  const uint32_t connectStart = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - connectStart < 15000) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[boot] Station Wi-Fi connect failed. Starting fallback AP instead.");
+    startWifiAccessPoint();
+    return;
+  }
+
+  wifiServer.begin();
+  wifiServer.setNoDelay(true);
+  wifiReady = true;
+
+  Serial.printf("[boot] Wi-Fi station connected. SSID=%s ip=%s port=%u\n",
+                kWifiSsid,
+                WiFi.localIP().toString().c_str(),
                 kWifiPort);
 }
 
@@ -138,7 +186,7 @@ void setup() {
   Serial.printf("[boot] USB serial ready at %lu baud\n", static_cast<unsigned long>(kBaudRate));
   printHelp(Serial);
 
-  startWifiAccessPoint();
+  startWifiStation();
 }
 
 void loop() {
