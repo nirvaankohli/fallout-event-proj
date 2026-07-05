@@ -226,8 +226,12 @@
         pads: {},
         reconnectTimer: null,
         keepaliveTimer: null,
+        driveTimer: null,
         shouldReconnect: true
       };
+
+      const joystickDeadzone = 8;
+      const driveIntervalMs = 75;
 
       const elements = {
         wsUrl: document.getElementById("ws-url"),
@@ -278,6 +282,13 @@
         }
       }
 
+      function clearDriveTimer() {
+        if (state.driveTimer) {
+          window.clearInterval(state.driveTimer);
+          state.driveTimer = null;
+        }
+      }
+
       function scheduleReconnect() {
         if (!state.shouldReconnect || state.reconnectTimer) {
           return;
@@ -293,6 +304,13 @@
         sendJson({ type: "drive", left: state.left, right: state.right });
       }
 
+      function startDriveTimer() {
+        clearDriveTimer();
+        state.driveTimer = window.setInterval(() => {
+          sendDrive();
+        }, driveIntervalMs);
+      }
+
       function stopAll() {
         state.left = 0;
         state.right = 0;
@@ -303,6 +321,7 @@
 
       function connectWebSocket() {
         if (state.socket) {
+          clearDriveTimer();
           clearKeepaliveTimer();
           state.socket.close();
         }
@@ -316,6 +335,8 @@
         socket.addEventListener("open", () => {
           setConnectionState(true, "connected");
           sendJson({ type: "ping" });
+          sendDrive();
+          startDriveTimer();
           clearKeepaliveTimer();
           state.keepaliveTimer = window.setInterval(() => {
             sendJson({ type: "ping" });
@@ -323,6 +344,7 @@
         });
 
         socket.addEventListener("close", () => {
+          clearDriveTimer();
           clearKeepaliveTimer();
           setConnectionState(false, "socket closed");
           scheduleReconnect();
@@ -380,7 +402,8 @@
         padState.knob.style.top = `${knobY}px`;
 
         const normalized = Math.round((-clampedY / limit) * 100);
-        state[side] = Math.max(-100, Math.min(100, normalized));
+        const clamped = Math.max(-100, Math.min(100, normalized));
+        state[side] = Math.abs(clamped) <= joystickDeadzone ? 0 : clamped;
         updateReadouts();
         sendDrive();
       }
@@ -432,6 +455,7 @@
       window.addEventListener("beforeunload", () => {
         state.shouldReconnect = false;
         clearReconnectTimer();
+        clearDriveTimer();
         clearKeepaliveTimer();
         stopAll();
         if (state.socket) {

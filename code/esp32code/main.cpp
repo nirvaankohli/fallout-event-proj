@@ -7,18 +7,24 @@ namespace {
 
 constexpr uint32_t kBaudRate = 115200;
 constexpr uint16_t kWebSocketPort = 3333;
-constexpr uint32_t kCommandTimeoutMs = 1000;
+constexpr uint32_t kCommandTimeoutMs = 300;
+constexpr int kCommandDeadzone = 8;
 constexpr char kWifiSsid[] = "Nirvaan's Phone";
 constexpr char kWifiPassword[] = "himynameisnirvaan";
 constexpr char kFallbackAccessPointSsid[] = "FalloutESP32";
 constexpr uint8_t kFallbackAccessPointChannel = 6;
-constexpr uint8_t kLeftDriveIn1Pin = 2;
-constexpr uint8_t kLeftDriveIn2Pin = 3;
-constexpr uint8_t kRightDriveIn1Pin = 4;
-constexpr uint8_t kRightDriveIn2Pin = 5;
-constexpr uint8_t kActivityLedPin = 6;
-constexpr uint8_t kSleepPin = 10;
+constexpr uint8_t kLeftDriveIn1Pin = D0;
+constexpr uint8_t kLeftDriveIn2Pin = D1;
+constexpr uint8_t kRightDriveIn1Pin = D2;
+constexpr uint8_t kRightDriveIn2Pin = D3;
+constexpr uint8_t kLeftDrive2In1Pin = D5;
+constexpr uint8_t kLeftDrive2In2Pin = D6;
+constexpr uint8_t kRightDrive2In1Pin = D7;
+constexpr uint8_t kRightDrive2In2Pin = D8;
+constexpr uint8_t kActivityLedPin = D4;
+constexpr uint8_t kSleepPin = D10;
 constexpr uint32_t kBootMotorTestStepMs = 700;
+constexpr bool kRunBootMotorTest = false;
 constexpr bool kInvertLeftMotor = true;
 constexpr bool kInvertRightMotor = false;
 
@@ -63,6 +69,11 @@ int clampCommand(int value) {
   return constrain(value, -100, 100);
 }
 
+int normalizeCommand(int value) {
+  const int clamped = clampCommand(value);
+  return abs(clamped) <= kCommandDeadzone ? 0 : clamped;
+}
+
 void setDriverSleep(bool enabled) {
   digitalWrite(kSleepPin, enabled ? HIGH : LOW);
 }
@@ -86,6 +97,18 @@ void applyMotorPins(uint8_t in1Pin, uint8_t in2Pin, int command) {
 
   digitalWrite(in1Pin, LOW);
   digitalWrite(in2Pin, LOW);
+}
+
+void applyLeftMotors(int command) {
+  const int normalizedCommand = kInvertLeftMotor ? -command : command;
+  applyMotorPins(kLeftDriveIn1Pin, kLeftDriveIn2Pin, normalizedCommand);
+  applyMotorPins(kLeftDrive2In1Pin, kLeftDrive2In2Pin, normalizedCommand);
+}
+
+void applyRightMotors(int command) {
+  const int normalizedCommand = kInvertRightMotor ? -command : command;
+  applyMotorPins(kRightDriveIn1Pin, kRightDriveIn2Pin, normalizedCommand);
+  applyMotorPins(kRightDrive2In1Pin, kRightDrive2In2Pin, normalizedCommand);
 }
 
 String buildStatusJson(const char *reason = nullptr) {
@@ -131,8 +154,8 @@ void sendErrorToClient(uint8_t clientNumber, const char *messageText) {
 void stopAllMotors(const char *reason) {
   motorState.left = 0;
   motorState.right = 0;
-  applyMotorPins(kLeftDriveIn1Pin, kLeftDriveIn2Pin, 0);
-  applyMotorPins(kRightDriveIn1Pin, kRightDriveIn2Pin, 0);
+  applyLeftMotors(0);
+  applyRightMotors(0);
   setDriverSleep(false);
   setActivityLed(false);
   timeoutStopReported = false;
@@ -140,20 +163,16 @@ void stopAllMotors(const char *reason) {
 }
 
 void applyDriveCommand(int left, int right, const char *source) {
-  motorState.left = clampCommand(left);
-  motorState.right = clampCommand(right);
+  motorState.left = normalizeCommand(left);
+  motorState.right = normalizeCommand(right);
   motorState.lastCommandAtMs = millis();
   timeoutStopReported = false;
 
   const bool anyMotorActive = motorState.left != 0 || motorState.right != 0;
   setDriverSleep(anyMotorActive);
   setActivityLed(anyMotorActive);
-  applyMotorPins(kLeftDriveIn1Pin,
-                 kLeftDriveIn2Pin,
-                 kInvertLeftMotor ? -motorState.left : motorState.left);
-  applyMotorPins(kRightDriveIn1Pin,
-                 kRightDriveIn2Pin,
-                 kInvertRightMotor ? -motorState.right : motorState.right);
+  applyLeftMotors(motorState.left);
+  applyRightMotors(motorState.right);
 
   Serial.printf("[motor] %s left=%d right=%d sleep=%s\n",
                 source,
@@ -167,13 +186,31 @@ void configureMotorPins() {
   pinMode(kLeftDriveIn2Pin, OUTPUT);
   pinMode(kRightDriveIn1Pin, OUTPUT);
   pinMode(kRightDriveIn2Pin, OUTPUT);
+  pinMode(kLeftDrive2In1Pin, OUTPUT);
+  pinMode(kLeftDrive2In2Pin, OUTPUT);
+  pinMode(kRightDrive2In1Pin, OUTPUT);
+  pinMode(kRightDrive2In2Pin, OUTPUT);
   pinMode(kActivityLedPin, OUTPUT);
   pinMode(kSleepPin, OUTPUT);
+  digitalWrite(kLeftDriveIn1Pin, LOW);
+  digitalWrite(kLeftDriveIn2Pin, LOW);
+  digitalWrite(kRightDriveIn1Pin, LOW);
+  digitalWrite(kRightDriveIn2Pin, LOW);
+  digitalWrite(kLeftDrive2In1Pin, LOW);
+  digitalWrite(kLeftDrive2In2Pin, LOW);
+  digitalWrite(kRightDrive2In1Pin, LOW);
+  digitalWrite(kRightDrive2In2Pin, LOW);
+  digitalWrite(kActivityLedPin, LOW);
+  digitalWrite(kSleepPin, LOW);
   stopAllMotors("boot");
 }
 
 void runBootMotorTest() {
-  
+  if (!kRunBootMotorTest) {
+    Serial.println("[boot] Motor self-test disabled");
+    return;
+  }
+
   Serial.println("[boot] Running motor self-test");
 
   applyDriveCommand(100, 0, "boot-left");

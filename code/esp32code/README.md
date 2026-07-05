@@ -1,6 +1,6 @@
 # XIAO ESP32-C3 Motor Controller
 
-This folder contains the firmware and browser controller for the DRV8833-driven dual-motor setup.
+This folder contains the firmware and browser controller for the DRV8833-driven four-motor setup.
 
 - `main.cpp`: XIAO ESP32-C3 firmware with Wi-Fi, WebSocket control, serial test commands, and safety timeout logic.
 - `web_controller.html`: Browser UI with two vertical joysticks for left/right tank drive.
@@ -8,14 +8,24 @@ This folder contains the firmware and browser controller for the DRV8833-driven 
 
 ## Pin mapping
 
-The firmware follows the schematic labels exactly:
+The firmware follows the XIAO `D` pin labels so the same source works across the XIAO ESP32-C3 and XIAO ESP32-S3 board variants:
 
-- `LeftDriveIn1` -> GPIO2 / D0
-- `LeftDriveIn2` -> GPIO3 / D1
-- `RightDriveIn1` -> GPIO4 / D2
-- `RightDriveIn2` -> GPIO5 / D3
-- `Activity LED` -> GPIO6 / D4
-- `Sleep` -> GPIO10 / D10
+- `LeftDriveIn1` -> `D0`
+- `LeftDriveIn2` -> `D1`
+- `RightDriveIn1` -> `D2`
+- `RightDriveIn2` -> `D3`
+- `LeftDrive2In1` -> `D5`
+- `LeftDrive2In2` -> `D6`
+- `RightDrive2In1` -> `D7`
+- `RightDrive2In2` -> `D8`
+- `Activity LED` -> `D4`
+- `Sleep` -> `D10`
+
+Both DRV8833 boards share the same high-level tank-drive commands:
+
+- Left joystick/command drives both left-side motors.
+- Right joystick/command drives both right-side motors.
+- `Sleep` is shared so both driver boards enable and disable together.
 
 DRV8833 drive behavior:
 
@@ -81,12 +91,19 @@ help
 - If joystick updates stop arriving for about `300 ms`, both motors are stopped automatically.
 - If the WebSocket client disconnects, both motors are stopped automatically.
 
+## Wiring notes for the second driver
+
+- Tie the second driver's `SLEEP` pin to the same `D10` signal as the first driver.
+- Connect the second left motor driver's inputs to `D5` and `D6`.
+- Connect the second right motor driver's inputs to `D7` and `D8`.
+- On a XIAO ESP32-C3, `D6` is boot UART output and `D8` is boot-sensitive. If you move back to a C3, keep that in mind during reset and flashing.
+
 ## Browser controller
 
 Open [web_controller.html](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/web_controller.html) in a browser.
 
-- Left joystick drives only the left motor.
-- Right joystick drives only the right motor.
+- Left joystick drives only the left motor group.
+- Right joystick drives only the right motor group.
 - Up is forward, down is reverse.
 - Releasing a joystick returns that motor to zero.
 - The page shows connection state and the last status reason returned by the XIAO.
