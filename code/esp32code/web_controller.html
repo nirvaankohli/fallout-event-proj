@@ -7,11 +7,9 @@
     <style>
       :root {
         --bg: #f2ede4;
-        --panel: rgba(255, 251, 245, 0.86);
+        --panel: rgba(255, 255, 255, 0.86);
         --ink: #17353a;
-        --accent: #bf5f3c;
-        --accent-strong: #8f341a;
-        --line: rgba(23, 53, 58, 0.14);
+        --line: rgba(0, 0, 0, 0.14);
         --good: #2f8f5b;
         --bad: #ad3b2e;
       }
@@ -25,21 +23,18 @@
         min-height: 100vh;
         font-family: "Avenir Next", "Segoe UI", sans-serif;
         color: var(--ink);
-        background:
-          radial-gradient(circle at top left, rgba(191, 95, 60, 0.18), transparent 35%),
-          linear-gradient(180deg, #f7f2e9 0%, #e8ddd0 100%);
+        background: var(--panel)
       }
 
       main {
         
-        width: min(1100px, calc(100vw - 32px));
+        width: 100%;
+        height: 100%;
         margin: 24px auto;
         padding: 24px;
-        border: 1px solid var(--line);
-        border-radius: 28px;
+
         background: var(--panel);
         backdrop-filter: blur(14px);
-        box-shadow: 0 24px 80px rgba(61, 41, 21, 0.14);
       }
 
       h1 {
@@ -54,16 +49,15 @@
       }
 
       .topbar {
+        position: relative;
         display: grid;
         gap: 16px;
       }
 
       .connection {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        align-items: center;
-        margin-top: 18px;
+        position: absolute;
+        top: 0;
+        right: 0;
       }
 
       input,
@@ -72,24 +66,16 @@
       }
 
       input {
-        min-width: min(360px, 100%);
-        padding: 12px 14px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.84);
+        display: none;
       }
 
       button {
         border: 0;
-        border-radius: 999px;
-        padding: 12px 18px;
-        color: #fff8f2;
-        background: var(--accent);
+        padding: 4px 6px;
+        color: var(--ink);
+        background: transparent;
         cursor: pointer;
-      }
-
-      button.secondary {
-        background: var(--ink);
+        font-size: 0.92rem;
       }
 
       .status-row {
@@ -131,8 +117,8 @@
       .joystick-card {
         padding: 20px;
         border-radius: 24px;
-        border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.62);
+        border: 0;
+        background: transparent;
       }
 
       .joystick-card h2 {
@@ -145,32 +131,16 @@
         width: min(100%, 320px);
         aspect-ratio: 1;
         margin: 18px auto 12px;
-        border-radius: 32px;
-        background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(232, 221, 208, 0.82)),
-          linear-gradient(90deg, rgba(23, 53, 58, 0.08), rgba(23, 53, 58, 0.02));
-        border: 1px solid rgba(23, 53, 58, 0.1);
+        border-radius: 50%;
+        background: transparent;
+        border: 2px solid rgba(23, 53, 58, 0.22);
         touch-action: none;
         overflow: hidden;
       }
 
       .pad::before,
       .pad::after {
-        content: "";
-        position: absolute;
-        inset: 50% auto auto 50%;
-        background: rgba(23, 53, 58, 0.12);
-        transform: translate(-50%, -50%);
-      }
-
-      .pad::before {
-        width: calc(100% - 28px);
-        height: 1px;
-      }
-
-      .pad::after {
-        width: 1px;
-        height: calc(100% - 28px);
+        display: none;
       }
 
       .knob {
@@ -180,10 +150,9 @@
         width: 84px;
         height: 84px;
         border-radius: 50%;
-        background:
-          radial-gradient(circle at 30% 30%, #fef7f1, #d96d44 55%, #8f341a 100%);
+        background: transparent;
+        border: 2px solid rgba(23, 53, 58, 0.28);
         transform: translate(-50%, -50%);
-        box-shadow: 0 12px 24px rgba(143, 52, 26, 0.28);
       }
 
       .value {
@@ -202,9 +171,8 @@
           grid-template-columns: 1fr;
         }
 
-        input {
-          min-width: 0;
-          width: 100%;
+        .connection {
+          position: static;
         }
       }
     </style>
@@ -213,14 +181,11 @@
     <main>
       <section class="topbar">
         <div>
-          <h1>Fallout Dual Drive</h1>
-          <p>Left joystick controls the left motor. Right joystick controls the right motor.</p>
         </div>
 
         <div class="connection">
           <input id="ws-url" type="text" value="ws://192.168.4.1:3333/" aria-label="WebSocket URL" />
           <button id="connect-btn">Connect</button>
-          <button id="stop-btn" class="secondary">Stop</button>
         </div>
 
         <div class="status-row">
@@ -249,9 +214,7 @@
         </article>
       </section>
 
-      <p class="hint">
-        Drag up for forward, drag down for reverse. Releasing either joystick recenters that motor to zero and sends a stop update.
-      </p>
+
     </main>
 
     <script>
@@ -265,7 +228,6 @@
       const elements = {
         wsUrl: document.getElementById("ws-url"),
         connectBtn: document.getElementById("connect-btn"),
-        stopBtn: document.getElementById("stop-btn"),
         statusDot: document.getElementById("status-dot"),
         statusText: document.getElementById("status-text"),
         statusReason: document.getElementById("status-reason"),
@@ -430,7 +392,6 @@
       }
 
       elements.connectBtn.addEventListener("click", connectWebSocket);
-      elements.stopBtn.addEventListener("click", stopAll);
       window.addEventListener("beforeunload", () => {
         stopAll();
         if (state.socket) {
