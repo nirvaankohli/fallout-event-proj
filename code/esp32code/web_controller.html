@@ -223,7 +223,10 @@
         left: 0,
         right: 0,
         socket: null,
-        pads: {}
+        pads: {},
+        reconnectTimer: null,
+        keepaliveTimer: null,
+        shouldReconnect: true
       };
 
       const elements = {
@@ -261,6 +264,31 @@
         state.socket.send(JSON.stringify(payload));
       }
 
+      function clearReconnectTimer() {
+        if (state.reconnectTimer) {
+          window.clearTimeout(state.reconnectTimer);
+          state.reconnectTimer = null;
+        }
+      }
+
+      function clearKeepaliveTimer() {
+        if (state.keepaliveTimer) {
+          window.clearInterval(state.keepaliveTimer);
+          state.keepaliveTimer = null;
+        }
+      }
+
+      function scheduleReconnect() {
+        if (!state.shouldReconnect || state.reconnectTimer) {
+          return;
+        }
+
+        state.reconnectTimer = window.setTimeout(() => {
+          state.reconnectTimer = null;
+          connectWebSocket();
+        }, 1200);
+      }
+
       function sendDrive() {
         sendJson({ type: "drive", left: state.left, right: state.right });
       }
@@ -275,21 +303,29 @@
 
       function connectWebSocket() {
         if (state.socket) {
+          clearKeepaliveTimer();
           state.socket.close();
         }
 
         const url = elements.wsUrl.value.trim();
         const socket = new WebSocket(url);
         state.socket = socket;
+        clearReconnectTimer();
         setConnectionState(false, "connecting");
 
         socket.addEventListener("open", () => {
           setConnectionState(true, "connected");
           sendJson({ type: "ping" });
+          clearKeepaliveTimer();
+          state.keepaliveTimer = window.setInterval(() => {
+            sendJson({ type: "ping" });
+          }, 4000);
         });
 
         socket.addEventListener("close", () => {
+          clearKeepaliveTimer();
           setConnectionState(false, "socket closed");
+          scheduleReconnect();
         });
 
         socket.addEventListener("error", () => {
@@ -394,6 +430,9 @@
 
       elements.connectBtn.addEventListener("click", connectWebSocket);
       window.addEventListener("beforeunload", () => {
+        state.shouldReconnect = false;
+        clearReconnectTimer();
+        clearKeepaliveTimer();
         stopAll();
         if (state.socket) {
           state.socket.close();
@@ -404,6 +443,7 @@
       bindPad("right", "right-pad");
       updateReadouts();
       updateStatusReadouts(0, 0);
+      connectWebSocket();
     </script>
   </body>
 </html>

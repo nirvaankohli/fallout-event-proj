@@ -7,7 +7,7 @@ namespace {
 
 constexpr uint32_t kBaudRate = 115200;
 constexpr uint16_t kWebSocketPort = 3333;
-constexpr uint32_t kCommandTimeoutMs = 300;
+constexpr uint32_t kCommandTimeoutMs = 1000;
 constexpr char kWifiSsid[] = "Nirvaan's Phone";
 constexpr char kWifiPassword[] = "himynameisnirvaan";
 constexpr char kFallbackAccessPointSsid[] = "FalloutESP32";
@@ -18,6 +18,7 @@ constexpr uint8_t kRightDriveIn1Pin = 4;
 constexpr uint8_t kRightDriveIn2Pin = 5;
 constexpr uint8_t kActivityLedPin = 6;
 constexpr uint8_t kSleepPin = 10;
+constexpr uint32_t kBootMotorTestStepMs = 700;
 
 IPAddress kFallbackAccessPointIp(192, 168, 4, 1);
 IPAddress kFallbackAccessPointGateway(192, 168, 4, 1);
@@ -165,6 +166,23 @@ void configureMotorPins() {
   stopAllMotors("boot");
 }
 
+void runBootMotorTest() {
+  
+  Serial.println("[boot] Running motor self-test");
+
+  applyDriveCommand(100, 0, "boot-left");
+  delay(kBootMotorTestStepMs);
+  stopAllMotors("boot-left-stop");
+  delay(250);
+
+  applyDriveCommand(0, 100, "boot-right");
+  delay(kBootMotorTestStepMs);
+  stopAllMotors("boot-right-stop");
+  delay(250);
+
+  Serial.println("[boot] Motor self-test complete");
+}
+
 void printHelp(Stream &stream) {
   stream.println("Commands:");
   stream.println("  ping");
@@ -248,12 +266,13 @@ void handleSerialMessage(const String &message, Stream &replyStream, const char 
 
 void startWebSocketServer() {
   webSocketServer.begin();
-  webSocketServer.enableHeartbeat(15000, 3000, 2);
+  webSocketServer.enableHeartbeat(30000, 10000, 2);
   Serial.printf("[boot] WebSocket server listening on port %u\n", kWebSocketPort);
 }
 
 void startWifiAccessPoint() {
   WiFi.mode(WIFI_AP);
+  WiFi.setSleep(false);
   const bool configOk =
       WiFi.softAPConfig(kFallbackAccessPointIp, kFallbackAccessPointGateway, kFallbackAccessPointSubnet);
   const bool started = WiFi.softAP(kFallbackAccessPointSsid, nullptr, kFallbackAccessPointChannel, 0, 2);
@@ -431,6 +450,7 @@ void setup() {
   Serial.printf("[boot] USB serial ready at %lu baud\n", static_cast<unsigned long>(kBaudRate));
 
   configureMotorPins();
+  runBootMotorTest();
   printHelp(Serial);
   startWifiStation();
   webSocketServer.onEvent(handleWebSocketEvent);
