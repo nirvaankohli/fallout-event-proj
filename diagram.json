@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "author": "OpenAI Codex",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-arduino-uno",
+      "id": "uno",
+      "top": -10,
+      "left": -10,
+      "attrs": {
+        "code": "src/main.cpp"
+      }
+    }
+  ],
+  "connections": [
+    [ "uno:TX", "$serialMonitor:RX", "", [] ],
+    [ "uno:RX", "$serialMonitor:TX", "", [] ]
+  ],
+  "serialMonitor": {
+    "display": "terminal",
+    "newline": "lf"
+  },
+  "dependencies": {}
+}
