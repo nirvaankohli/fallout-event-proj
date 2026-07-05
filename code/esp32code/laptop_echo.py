@@ -9,14 +9,6 @@ import socket
 import sys
 import time
 
-try:
-    import serial
-except ImportError as exc:  # pragma: no cover - user environment dependent
-    raise SystemExit(
-        "pyserial is required. Install it with: python3 -m pip install pyserial"
-    ) from exc
-
-
 def auto_detect_serial_port() -> str:
     candidates = sorted(
         glob.glob("/dev/cu.usbmodem*")
@@ -28,7 +20,14 @@ def auto_detect_serial_port() -> str:
     return candidates[0]
 
 
-def open_serial_client(port: str, baud: int) -> serial.Serial:
+def open_serial_client(port: str, baud: int):
+    try:
+        import serial
+    except ImportError as exc:  # pragma: no cover - user environment dependent
+        raise SystemExit(
+            "pyserial is required for serial mode. Install it with: python3 -m pip install pyserial"
+        ) from exc
+
     device = serial.Serial(port=port, baudrate=baud, timeout=1)
     time.sleep(2)
     device.reset_input_buffer()

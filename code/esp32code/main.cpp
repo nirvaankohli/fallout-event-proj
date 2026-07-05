@@ -5,11 +5,12 @@ namespace {
 
 constexpr uint32_t kBaudRate = 115200;
 constexpr uint16_t kWifiPort = 3333;
-constexpr char kWifiSsid[] = "";
-constexpr char kWifiPassword[] = "";
+constexpr char kAccessPointSsid[] = "Fallout-ESP32-Echo";
+constexpr char kAccessPointPassword[] = "fallout123";
 
 WiFiServer wifiServer(kWifiPort);
 WiFiClient wifiClient;
+bool wifiReady = false;
 
 String readLineFrom(Stream &stream) {
   static String buffer;
@@ -73,36 +74,27 @@ void handleMessage(const String &message, Stream &replyStream, const char *chann
   replyStream.printf("[%s] echo: %s\n", channelName, message.c_str());
 }
 
-void tryStartWifi() {
-  if (strlen(kWifiSsid) == 0) {
-    Serial.println("[boot] Wi-Fi disabled. Set kWifiSsid/kWifiPassword in main.cpp to enable TCP echo.");
-    return;
-  }
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(kWifiSsid, kWifiPassword);
-
-  Serial.printf("[boot] Connecting to Wi-Fi SSID '%s'\n", kWifiSsid);
-
-  const uint32_t startTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startTime < 15000) {
-    delay(250);
-    Serial.print(".");
-  }
-  Serial.println();
-
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[boot] Wi-Fi connect timed out. USB serial echo is still available.");
+void startWifiAccessPoint() {
+  WiFi.mode(WIFI_AP);
+  const bool started = WiFi.softAP(kAccessPointSsid, kAccessPointPassword);
+  if (!started) {
+    Serial.println("[boot] Failed to start Wi-Fi access point.");
     return;
   }
 
   wifiServer.begin();
   wifiServer.setNoDelay(true);
-  Serial.printf("[boot] Wi-Fi ready at %s:%u\n", WiFi.localIP().toString().c_str(), kWifiPort);
+  wifiReady = true;
+
+  Serial.printf("[boot] Wi-Fi AP ready. SSID=%s password=%s\n", kAccessPointSsid, kAccessPointPassword);
+  Serial.printf("[boot] Connect laptop to %s and open %s:%u\n",
+                kAccessPointSsid,
+                WiFi.softAPIP().toString().c_str(),
+                kWifiPort);
 }
 
 void maintainWifiClient() {
-  if (WiFi.status() != WL_CONNECTED) {
+  if (!wifiReady) {
     return;
   }
 
@@ -146,7 +138,7 @@ void setup() {
   Serial.printf("[boot] USB serial ready at %lu baud\n", static_cast<unsigned long>(kBaudRate));
   printHelp(Serial);
 
-  tryStartWifi();
+  startWifiAccessPoint();
 }
 
 void loop() {
