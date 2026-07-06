@@ -13,20 +13,29 @@ constexpr char kWifiSsid[] = "Nirvaan's Phone";
 constexpr char kWifiPassword[] = "himynameisnirvaan";
 constexpr char kFallbackAccessPointSsid[] = "FalloutESP32";
 constexpr uint8_t kFallbackAccessPointChannel = 6;
-constexpr uint8_t kLeftDriveIn1Pin = D0;
-constexpr uint8_t kLeftDriveIn2Pin = D1;
-constexpr uint8_t kRightDriveIn1Pin = D2;
-constexpr uint8_t kRightDriveIn2Pin = D3;
-constexpr uint8_t kLeftDrive2In1Pin = D5;
-constexpr uint8_t kLeftDrive2In2Pin = D6;
-constexpr uint8_t kRightDrive2In1Pin = D7;
-constexpr uint8_t kRightDrive2In2Pin = D8;
-constexpr uint8_t kActivityLedPin = D4;
-constexpr uint8_t kSleepPin = D10;
+constexpr uint8_t kActivityLedPin = 255;
+constexpr uint8_t kSleepPin = 255;
 constexpr uint32_t kBootMotorTestStepMs = 700;
 constexpr bool kRunBootMotorTest = false;
 constexpr bool kInvertLeftMotor = true;
 constexpr bool kInvertRightMotor = false;
+constexpr uint8_t kPwmMaxDuty = 255;
+
+struct MotorPins {
+  uint8_t in1Pin;
+  uint8_t in2Pin;
+};
+
+// The second driver is mapped with raw GPIO numbers so it lands on GPIO10/9/8/7 exactly.
+constexpr MotorPins kLeftMotors[] = {
+    {D0, D1},
+    {10, 9},
+};
+
+constexpr MotorPins kRightMotors[] = {
+    {D2, D3},
+    {8, 7},
+};
 
 IPAddress kFallbackAccessPointIp(192, 168, 4, 1);
 IPAddress kFallbackAccessPointGateway(192, 168, 4, 1);
@@ -75,40 +84,69 @@ int normalizeCommand(int value) {
 }
 
 void setDriverSleep(bool enabled) {
+  if (kSleepPin == 255) {
+    return;
+  }
   digitalWrite(kSleepPin, enabled ? HIGH : LOW);
 }
 
 void setActivityLed(bool enabled) {
+  if (kActivityLedPin == 255) {
+    return;
+  }
   digitalWrite(kActivityLedPin, enabled ? HIGH : LOW);
 }
 
-void applyMotorPins(uint8_t in1Pin, uint8_t in2Pin, int command) {
-  if (command > 0) {
-    digitalWrite(in1Pin, HIGH);
-    digitalWrite(in2Pin, LOW);
-    return;
-  }
+uint8_t commandToDutyCycle(int command) {
+  return static_cast<uint8_t>(map(abs(command), 0, 100, 0, kPwmMaxDuty));
+}
 
-  if (command < 0) {
-    digitalWrite(in1Pin, LOW);
-    digitalWrite(in2Pin, HIGH);
-    return;
-  }
-
+void stopMotorPins(uint8_t in1Pin, uint8_t in2Pin) {
+  analogWrite(in1Pin, 0);
+  analogWrite(in2Pin, 0);
   digitalWrite(in1Pin, LOW);
   digitalWrite(in2Pin, LOW);
 }
 
+void applyMotorPins(uint8_t in1Pin, uint8_t in2Pin, int command) {
+  const uint8_t dutyCycle = commandToDutyCycle(command);
+  if (dutyCycle == 0) {
+    stopMotorPins(in1Pin, in2Pin);
+    return;
+  }
+
+  if (command > 0) {
+    analogWrite(in2Pin, 0);
+    digitalWrite(in2Pin, LOW);
+    analogWrite(in1Pin, dutyCycle);
+    return;
+  }
+
+  analogWrite(in1Pin, 0);
+  digitalWrite(in1Pin, LOW);
+  analogWrite(in2Pin, dutyCycle);
+}
+
+void stopMotor(const MotorPins &motor) {
+  stopMotorPins(motor.in1Pin, motor.in2Pin);
+}
+
+void applyMotor(const MotorPins &motor, int command) {
+  applyMotorPins(motor.in1Pin, motor.in2Pin, command);
+}
+
 void applyLeftMotors(int command) {
   const int normalizedCommand = kInvertLeftMotor ? -command : command;
-  applyMotorPins(kLeftDriveIn1Pin, kLeftDriveIn2Pin, normalizedCommand);
-  applyMotorPins(kLeftDrive2In1Pin, kLeftDrive2In2Pin, normalizedCommand);
+  for (const MotorPins &motor : kLeftMotors) {
+    applyMotor(motor, normalizedCommand);
+  }
 }
 
 void applyRightMotors(int command) {
   const int normalizedCommand = kInvertRightMotor ? -command : command;
-  applyMotorPins(kRightDriveIn1Pin, kRightDriveIn2Pin, normalizedCommand);
-  applyMotorPins(kRightDrive2In1Pin, kRightDrive2In2Pin, normalizedCommand);
+  for (const MotorPins &motor : kRightMotors) {
+    applyMotor(motor, normalizedCommand);
+  }
 }
 
 String buildStatusJson(const char *reason = nullptr) {
@@ -182,27 +220,33 @@ void applyDriveCommand(int left, int right, const char *source) {
 }
 
 void configureMotorPins() {
-  pinMode(kLeftDriveIn1Pin, OUTPUT);
-  pinMode(kLeftDriveIn2Pin, OUTPUT);
-  pinMode(kRightDriveIn1Pin, OUTPUT);
-  pinMode(kRightDriveIn2Pin, OUTPUT);
-  pinMode(kLeftDrive2In1Pin, OUTPUT);
-  pinMode(kLeftDrive2In2Pin, OUTPUT);
-  pinMode(kRightDrive2In1Pin, OUTPUT);
-  pinMode(kRightDrive2In2Pin, OUTPUT);
-  pinMode(kActivityLedPin, OUTPUT);
-  pinMode(kSleepPin, OUTPUT);
-  digitalWrite(kLeftDriveIn1Pin, LOW);
-  digitalWrite(kLeftDriveIn2Pin, LOW);
-  digitalWrite(kRightDriveIn1Pin, LOW);
-  digitalWrite(kRightDriveIn2Pin, LOW);
-  digitalWrite(kLeftDrive2In1Pin, LOW);
-  digitalWrite(kLeftDrive2In2Pin, LOW);
-  digitalWrite(kRightDrive2In1Pin, LOW);
-  digitalWrite(kRightDrive2In2Pin, LOW);
-  digitalWrite(kActivityLedPin, LOW);
-  digitalWrite(kSleepPin, LOW);
-  stopAllMotors("boot");
+  for (const MotorPins &motor : kLeftMotors) {
+    pinMode(motor.in1Pin, OUTPUT);
+    pinMode(motor.in2Pin, OUTPUT);
+    stopMotor(motor);
+  }
+  for (const MotorPins &motor : kRightMotors) {
+    pinMode(motor.in1Pin, OUTPUT);
+    pinMode(motor.in2Pin, OUTPUT);
+    stopMotor(motor);
+  }
+  if (kActivityLedPin != 255) {
+    pinMode(kActivityLedPin, OUTPUT);
+  }
+  if (kSleepPin != 255) {
+    pinMode(kSleepPin, OUTPUT);
+  }
+
+  if (kActivityLedPin != 255) {
+    digitalWrite(kActivityLedPin, LOW);
+  }
+  if (kSleepPin != 255) {
+    digitalWrite(kSleepPin, LOW);
+  }
+  motorState.left = 0;
+  motorState.right = 0;
+  motorState.lastCommandAtMs = 0;
+  timeoutStopReported = false;
 }
 
 void runBootMotorTest() {
@@ -481,6 +525,7 @@ void maintainSafetyTimeout() {
 }  // namespace
 
 void setup() {
+  configureMotorPins();
   Serial.begin(kBaudRate);
 
   const uint32_t serialWaitStart = millis();
@@ -492,7 +537,7 @@ void setup() {
   Serial.println("[boot] XIAO ESP32-C3 motor controller starting");
   Serial.printf("[boot] USB serial ready at %lu baud\n", static_cast<unsigned long>(kBaudRate));
 
-  configureMotorPins();
+  stopAllMotors("boot");
   runBootMotorTest();
   printHelp(Serial);
   startWifiStation();
