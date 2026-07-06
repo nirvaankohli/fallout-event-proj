@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fallout Motor Control</title>
+    <style>
+      :root {
+        --bg: #f2ede4;
+        --panel: rgba(255, 255, 255, 0.86);
+        --ink: #17353a;
+        --line: rgba(0, 0, 0, 0.14);
+        --good: #2f8f5b;
+        --bad: #ad3b2e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: var(--panel)
+      }
+
+      main {
+        
+        width: 100%;
+        height: 100%;
+        margin: 24px auto;
+        padding: 24px;
+
+        background: var(--panel);
+        backdrop-filter: blur(14px);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(2rem, 4vw, 3.8rem);
+        line-height: 0.95;
+        letter-spacing: -0.04em;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      .topbar {
+        position: relative;
+        display: grid;
+        gap: 16px;
+      }
+
+      .connection {
+        position: absolute;
+        top: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      input,
+      button {
+        font: inherit;
+      }
+
+      input {
+        min-width: min(48vw, 280px);
+        border: 1px solid rgba(23, 53, 58, 0.22);
+        border-radius: 999px;
+        padding: 8px 12px;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.78);
+      }
+
+      button {
+        border: 0;
+        padding: 4px 6px;
+        color: var(--ink);
+        background: transparent;
+        cursor: pointer;
+        font-size: 0.92rem;
+      }
+
+      .status-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        margin-top: 18px;
+        font-size: 0.95rem;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #8f8f8f;
+      }
+
+      .dot.connected {
+        background: var(--good);
+      }
+
+      .dot.disconnected {
+        background: var(--bad);
+      }
+
+      .controllers {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(260px, 1fr));
+        gap: 24px;
+        margin-top: 30px;
+      }
+
+      .joystick-card {
+        padding: 20px;
+        border-radius: 24px;
+        border: 0;
+        background: transparent;
+      }
+
+      .joystick-card h2 {
+        margin: 0 0 8px;
+        font-size: 1.2rem;
+      }
+
+      .pad {
+        position: relative;
+        width: min(100%, 320px);
+        aspect-ratio: 1;
+        margin: 18px auto 12px;
+        border-radius: 50%;
+        background: transparent;
+        border: 2px solid rgba(23, 53, 58, 0.22);
+        touch-action: none;
+        overflow: hidden;
+      }
+
+      .pad::before,
+      .pad::after {
+        display: none;
+      }
+
+      .knob {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 50%;
+        height: 50%;
+        border-radius: 50%;
+        background: transparent;
+        border: 2px solid rgba(23, 53, 58, 0.28);
+        background: rgba(23, 53, 58, 0.08);
+        transform: translate(-50%, -50%);
+      }
+
+      .value {
+        font-size: 1rem;
+        text-align: center;
+      }
+
+      .hint {
+        margin-top: 24px;
+        color: rgba(23, 53, 58, 0.72);
+        font-size: 0.95rem;
+      }
+
+      .socket-help {
+        margin-top: 10px;
+        color: rgba(23, 53, 58, 0.72);
+        font-size: 0.92rem;
+      }
+
+      @media (max-width: 760px) {
+        .controllers {
+          grid-template-columns: 1fr;
+        }
+
+        .connection {
+          position: static;
+          flex-wrap: wrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="topbar">
+        <div>
+        </div>
+
+        <div class="connection">
+          <input id="ws-url" type="text" value="ws://192.168.4.1:3333/" aria-label="WebSocket URL" />
+          <button id="connect-btn">Connect</button>
+        </div>
+
+        <div class="status-row">
+          <div class="pill"><span id="status-dot" class="dot disconnected"></span><span id="status-text">Disconnected</span></div>
+          <div class="pill">Last status: <strong id="status-reason">idle</strong></div>
+          <div class="pill">Motor Left: <strong id="left-readout">0</strong></div>
+          <div class="pill">Motor Right: <strong id="right-readout">0</strong></div>
+        </div>
+
+        <p class="socket-help">
+          Use <code>ws://192.168.4.1:3333/</code> when connected to the ESP's <code>FalloutESP32</code> Wi-Fi. If the board joins another Wi-Fi network, enter its printed IP here instead.
+        </p>
+        <p class="socket-help">
+          Left pad is forward and reverse. Right pad is turn. Pushing the right pad up turns right by speeding up the left side and slowing down the right side.
+        </p>
+      </section>
+
+      <section class="controllers">
+        <article class="joystick-card">
+          <h2>Drive</h2>
+          <div id="left-pad" class="pad" data-side="drive">
+            <div class="knob"></div>
+          </div>
+          <div class="value">Drive: <strong id="left-value">0</strong></div>
+        </article>
+
+        <article class="joystick-card">
+          <h2>Rotate</h2>
+          <div id="right-pad" class="pad" data-side="turn">
+            <div class="knob"></div>
+          </div>
+          <div class="value">Turn: <strong id="right-value">0</strong></div>
+        </article>
+      </section>
+
+
+    </main>
+
+    <script>
+      const state = {
+        drive: 0,
+        turn: 0,
+        leftMotor: 0,
+        rightMotor: 0,
+        socket: null,
+        pads: {},
+        reconnectTimer: null,
+        keepaliveTimer: null,
+        driveTimer: null,
+        shouldReconnect: true
+      };
+
+      const joystickDeadzone = 8;
+      const driveIntervalMs = 33;
+      const defaultSocketUrl = "ws://192.168.4.1:3333/";
+      const savedSocketUrlKey = "fallout-ws-url";
+
+      const elements = {
+        wsUrl: document.getElementById("ws-url"),
+        connectBtn: document.getElementById("connect-btn"),
+        statusDot: document.getElementById("status-dot"),
+        statusText: document.getElementById("status-text"),
+        statusReason: document.getElementById("status-reason"),
+        leftValue: document.getElementById("left-value"),
+        rightValue: document.getElementById("right-value"),
+        leftReadout: document.getElementById("left-readout"),
+        rightReadout: document.getElementById("right-readout")
+      };
+
+      function setConnectionState(connected, message) {
+        elements.statusDot.className = `dot ${connected ? "connected" : "disconnected"}`;
+        elements.statusText.textContent = connected ? "Connected" : "Disconnected";
+        elements.statusReason.textContent = message;
+      }
+
+      function deriveDefaultSocketUrl() {
+        const savedUrl = window.localStorage.getItem(savedSocketUrlKey);
+        if (savedUrl) {
+          return savedUrl;
+        }
+
+        if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+          const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+          return `${protocol}//${window.location.hostname}:3333/`;
+        }
+
+        return defaultSocketUrl;
+      }
+
+      function updateReadouts() {
+        elements.leftValue.textContent = String(state.drive);
+        elements.rightValue.textContent = String(state.turn);
+      }
+
+      function updateStatusReadouts(left, right) {
+        elements.leftReadout.textContent = String(left);
+        elements.rightReadout.textContent = String(right);
+      }
+
+      function clampCommand(value) {
+        return Math.max(-100, Math.min(100, value));
+      }
+
+      function syncMixedOutputs() {
+        const mixedLeft = state.drive + state.turn;
+        const mixedRight = state.drive - state.turn;
+        const scale = Math.max(100, Math.abs(mixedLeft), Math.abs(mixedRight));
+        state.leftMotor = Math.round((mixedLeft / scale) * 100);
+        state.rightMotor = Math.round((mixedRight / scale) * 100);
+      }
+
+      function sendJson(payload) {
+        if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+          return;
+        }
+        state.socket.send(JSON.stringify(payload));
+      }
+
+      function clearReconnectTimer() {
+        if (state.reconnectTimer) {
+          window.clearTimeout(state.reconnectTimer);
+          state.reconnectTimer = null;
+        }
+      }
+
+      function clearKeepaliveTimer() {
+        if (state.keepaliveTimer) {
+          window.clearInterval(state.keepaliveTimer);
+          state.keepaliveTimer = null;
+        }
+      }
+
+      function clearDriveTimer() {
+        if (state.driveTimer) {
+          window.clearInterval(state.driveTimer);
+          state.driveTimer = null;
+        }
+      }
+
+      function scheduleReconnect() {
+        if (!state.shouldReconnect || state.reconnectTimer) {
+          return;
+        }
+
+        state.reconnectTimer = window.setTimeout(() => {
+          state.reconnectTimer = null;
+          connectWebSocket();
+        }, 1200);
+      }
+
+      function sendDrive() {
+        syncMixedOutputs();
+        sendJson({ type: "drive", left: state.leftMotor, right: state.rightMotor });
+      }
+
+      function startDriveTimer() {
+        clearDriveTimer();
+        state.driveTimer = window.setInterval(() => {
+          sendDrive();
+        }, driveIntervalMs);
+      }
+
+      function stopAll() {
+        state.drive = 0;
+        state.turn = 0;
+        syncMixedOutputs();
+        updateReadouts();
+        centerAllPads();
+        sendJson({ type: "stop" });
+      }
+
+      function connectWebSocket() {
+        if (state.socket) {
+          clearDriveTimer();
+          clearKeepaliveTimer();
+          state.socket.close();
+        }
+
+        const url = elements.wsUrl.value.trim();
+        if (!url) {
+          setConnectionState(false, "missing websocket url");
+          return;
+        }
+
+        window.localStorage.setItem(savedSocketUrlKey, url);
+        const socket = new WebSocket(url);
+        state.socket = socket;
+        clearReconnectTimer();
+        setConnectionState(false, `connecting to ${url}`);
+
+        socket.addEventListener("open", () => {
+          setConnectionState(true, "connected");
+          sendJson({ type: "ping" });
+          sendDrive();
+          startDriveTimer();
+          clearKeepaliveTimer();
+          state.keepaliveTimer = window.setInterval(() => {
+            sendJson({ type: "ping" });
+          }, 4000);
+        });
+
+        socket.addEventListener("close", () => {
+          clearDriveTimer();
+          clearKeepaliveTimer();
+          setConnectionState(false, `socket closed (${url})`);
+          scheduleReconnect();
+        });
+
+        socket.addEventListener("error", () => {
+          setConnectionState(false, `socket error (${url})`);
+        });
+
+        socket.addEventListener("message", (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === "status") {
+              updateStatusReadouts(payload.left ?? 0, payload.right ?? 0);
+              elements.statusReason.textContent = payload.reason ?? "status";
+            } else if (payload.type === "error") {
+              elements.statusReason.textContent = payload.message ?? "error";
+            }
+          } catch (error) {
+            elements.statusReason.textContent = "bad response";
+          }
+        });
+      }
+
+      function centerPad(side) {
+        const padState = state.pads[side];
+        if (!padState) {
+          return;
+        }
+        padState.knob.style.left = "50%";
+        padState.knob.style.top = "50%";
+      }
+
+      function centerAllPads() {
+        centerPad("left");
+        centerPad("right");
+      }
+
+      function updateSide(side, event) {
+        const padState = state.pads[side];
+        if (!padState) {
+          return;
+        }
+
+        const rect = padState.pad.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const limit = rect.height / 2 - 42;
+
+        const clampedY = Math.max(-limit, Math.min(limit, y - centerY));
+        const knobY = centerY + clampedY;
+        padState.knob.style.left = `${centerX}px`;
+        padState.knob.style.top = `${knobY}px`;
+
+        const normalized = Math.round((-clampedY / limit) * 100);
+        const clamped = Math.max(-100, Math.min(100, normalized));
+        state[side] = Math.abs(clamped) <= joystickDeadzone ? 0 : clampCommand(clamped);
+        updateReadouts();
+        sendDrive();
+      }
+
+      function releaseSide(side) {
+        state[side] = 0;
+        syncMixedOutputs();
+        updateReadouts();
+        centerPad(side);
+        sendDrive();
+      }
+
+      function bindPad(side, padId) {
+        const pad = document.getElementById(padId);
+        const knob = pad.querySelector(".knob");
+        state.pads[side] = { pad, knob };
+
+        let pointerId = null;
+
+        pad.addEventListener("pointerdown", (event) => {
+          pointerId = event.pointerId;
+          pad.setPointerCapture(pointerId);
+          updateSide(side, event);
+        });
+
+        pad.addEventListener("pointermove", (event) => {
+          if (pointerId !== event.pointerId) {
+            return;
+          }
+          updateSide(side, event);
+        });
+
+        const release = (event) => {
+          if (pointerId !== event.pointerId) {
+            return;
+          }
+          pointerId = null;
+          releaseSide(side);
+        };
+
+        pad.addEventListener("pointerup", release);
+        pad.addEventListener("pointercancel", release);
+        pad.addEventListener("lostpointercapture", () => {
+          pointerId = null;
+          releaseSide(side);
+        });
+      }
+
+      elements.connectBtn.addEventListener("click", connectWebSocket);
+      window.addEventListener("beforeunload", () => {
+        state.shouldReconnect = false;
+        clearReconnectTimer();
+        clearDriveTimer();
+        clearKeepaliveTimer();
+        stopAll();
+        if (state.socket) {
+          state.socket.close();
+        }
+      });
+
+      bindPad("drive", "left-pad");
+      bindPad("turn", "right-pad");
+      elements.wsUrl.value = deriveDefaultSocketUrl();
+      syncMixedOutputs();
+      updateReadouts();
+      updateStatusReadouts(0, 0);
+      connectWebSocket();
+    </script>
+  </body>
+</html>

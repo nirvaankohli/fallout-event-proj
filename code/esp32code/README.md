@@ -1,6 +1,6 @@
 # XIAO ESP32-C3 Motor Controller
 
-This folder contains the firmware and browser controller for the DRV8833-driven dual-motor setup.
+This folder contains the firmware and browser controller for a four-motor tank-drive setup built from two DRV8833 drivers.
 
 - `main.cpp`: XIAO ESP32-C3 firmware with Wi-Fi, WebSocket control, serial test commands, and safety timeout logic.
 - `web_controller.html`: Browser UI with two vertical joysticks for left/right tank drive.
@@ -8,20 +8,29 @@ This folder contains the firmware and browser controller for the DRV8833-driven 
 
 ## Pin mapping
 
-The firmware follows the schematic labels exactly:
+This firmware fans each left/right drive command out to two motors per side using the bench-tested wiring from the temporary motor-spin sketch:
 
-- `LeftDriveIn1` -> GPIO2 / D0
-- `LeftDriveIn2` -> GPIO3 / D1
-- `RightDriveIn1` -> GPIO4 / D2
-- `RightDriveIn2` -> GPIO5 / D3
-- `Activity LED` -> GPIO6 / D4
-- `Sleep` -> GPIO10 / D10
+- `Left front motor IN1` -> `GPIO2`
+- `Left front motor IN2` -> `GPIO3`
+- `Right front motor IN1` -> `GPIO4`
+- `Right front motor IN2` -> `GPIO5`
+- `Left rear motor IN1` -> `GPIO20`
+- `Left rear motor IN2` -> `GPIO8`
+- `Right rear motor IN1` -> `GPIO9`
+- `Right rear motor IN2` -> `GPIO10`
 
-DRV8833 drive behavior:
+Each side is controlled independently:
+
+- Left joystick/command drives both left motors together.
+- Right joystick/command drives both right motors together.
+
+DRV8833 drive behavior for each motor channel:
 
 - Forward: `IN1=HIGH`, `IN2=LOW`
 - Reverse: `IN1=LOW`, `IN2=HIGH`
 - Stop/coast: both inputs `LOW`
+
+Command magnitude still uses `-100..100`, but the current firmware treats any non-zero value as a full-speed direction command.
 
 ## Wi-Fi flow
 
@@ -75,20 +84,26 @@ help
 
 ## Safety stop
 
-- The DRV8833 `SLEEP` pin is driven high only while a motor command is active.
-- GPIO6 is driven high at the same time, so an external LED can indicate active joystick motion.
+- The firmware stops motors by driving all H-bridge inputs `LOW`.
+- `SLEEP` is not MCU-controlled in firmware.
 - Invalid WebSocket payloads force a safe stop.
-- If joystick updates stop arriving for about `300 ms`, both motors are stopped automatically.
-- If the WebSocket client disconnects, both motors are stopped automatically.
+- If joystick updates stop arriving for about `300 ms`, all four motors are stopped automatically.
+- If the WebSocket client disconnects, all four motors are stopped automatically.
+
+## Startup behavior
+
+- On boot, all four motors spin forward together for about `0.5 s`.
+- After that startup check, the firmware stops the motors and starts Wi-Fi/WebSocket control.
 
 ## Browser controller
 
 Open [web_controller.html](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/web_controller.html) in a browser.
 
-- Left joystick drives only the left motor.
-- Right joystick drives only the right motor.
+- Left pad controls forward and reverse drive.
+- Right pad controls turning.
 - Up is forward, down is reverse.
 - Releasing a joystick returns that motor to zero.
+- The page resends the held drive command about every `33 ms` to keep response feeling tight.
 - The page shows connection state and the last status reason returned by the XIAO.
 
 ## Build and upload
