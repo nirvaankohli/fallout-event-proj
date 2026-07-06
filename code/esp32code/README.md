@@ -99,10 +99,11 @@ help
 
 Open [web_controller.html](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/web_controller.html) in a browser.
 
-- Left joystick drives both left motors together.
-- Right joystick drives both right motors together.
+- Left pad controls forward and reverse drive.
+- Right pad controls turning.
 - Up is forward, down is reverse.
 - Releasing a joystick returns that motor to zero.
+- The page resends the held drive command about every `33 ms` to keep response feeling tight.
 - The page shows connection state and the last status reason returned by the XIAO.
 
 ## Build and upload

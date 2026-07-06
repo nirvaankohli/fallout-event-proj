@@ -13,7 +13,7 @@ So the world is ending on the 7th of July and the human species may not survive.
 
 # What is FALL-E?
 
-FALL-E is a robot inspired by the pixar movie "WALL-E" and is meant to preserve soup and the legacy of the human species after the destruction of the world. It has a tank-drive chassis with two independent tracks(motor on each side) along with a mechanism that allows it to jump. It also has an onboard camera to preserve your face in it system for future species or for the robots reference(facial recognition).
+FALL-E is a robot inspired by the pixar movie "WALL-E" and is meant to preserve soup and the legacy of the human species after the destruction of the world. It has a tank-drive chassis with two independent tracks(motor on each side).
 
 FALL-E features a Seeed Studio XIAO ESP32C3, 2 DC Motors, and a DRV8833 Motor Driver. 
 
@@ -21,29 +21,49 @@ FALL-E features a Seeed Studio XIAO ESP32C3, 2 DC Motors, and a DRV8833 Motor Dr
 
 # Why choose FALL-E?
 
-Our team went into this competition wanting to create something to protect soup and preserve humankind's legacy. We started brainstorming ideas that could do that. ltimately, two avenues presented themselves: one giving soup wweaponry (like a turret) or giving it a form of transportation. We ultimately settled on a robot to keep soup company, protection and a form of transportation. We wanted to base it off of WALL-E because it too was exploring a barren, destroyed earth.
+Our team went into this competition wanting to create something to protect soup and preserve humankind's legacy. We started brainstorming ideas that could do that. Ultimately, two avenues presented themselves: one giving soup wweaponry (like a turret) or giving it a form of transportation. We ultimately settled on a robot to keep soup company, protection and a form of transportation. We wanted to base it off of WALL-E because it too was exploring a barren, destroyed earth.
+
 
 ---
 
-# CAD Renderings
+## Bill of materials
+
+- BOM: [bom.csv](bom.csv)
+
 
 ---
 
 # IRL Pics
 
+
+![alt text](assets/images/irl/1.jpeg)
+![alt text](assets/images/irl/2.jpeg)
+![alt text](assets/images/irl/3.jpeg)
+
+
 ---
 
 # Schematic/Wiring Diagram
-
-<replace>with most recent of the thing</replace>
 
 ![alt text](assets/images/wiring.png)
 
 ---
 
-# How to use it?
+# How to assemble it(with pics)?
 
-<add>non-code/firmware instructions<add>
+1. Gather your breadboard, wires, & electronic components.
+2. Wire the breadboard following the wiring diagram below:
+![alt text](assets/images/wiring.png)
+    a. You need to solder with solder & a soldering iron the microcontroller and it's header pins along with the dupont wires with the tt motors
+
+After you do so, the result should look like this:
+
+![alt text](assets/images/assembly/1.jpeg)
+![alt text](assets/images/assembly/2.jpeg)
+
+3. Next up is too make the body. For the main cube inside cut 6 17x17 cm squares 
+
+# How to use it?
 
 ## Flash XIAO ESP32-C3
 

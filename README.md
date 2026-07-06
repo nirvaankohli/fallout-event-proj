@@ -1,29 +1,102 @@
-# fallout-event-proj
+# FALL-E
 
-This repo now targets a `seeed_xiao_esp32c3` motor-control build for the Fallout event hardware.
+<replace>with pic of the zine</replace>
 
-## Current behavior
+---
 
-- Connects the XIAO ESP32-C3 to Wi‑Fi or starts a fallback access point
-- Exposes a WebSocket motor-control endpoint on port `3333`
-- Drives four motors across two DRV8833 dual H-bridges using the firmware pin mapping
-- Supports tank-drive commands where left and right values control the left and right motor pairs independently
-- Includes a browser controller page with two virtual joysticks
-- Keeps a serial command interface for quick testing and diagnostics
-- Auto-stops the motors on disconnect, invalid payload, or command timeout
+# The Problem
 
-## Main files
+So the world is ending on the 7th of July and the human species may not survive. Soup, however can survive the incoming apocalypse, but only with help. Soup needs a companion to accompany itself(as soup can't walk) to preserve the legacy of humankind for the next species to rule earth.
 
-- Firmware: [code/esp32code/main.cpp](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/main.cpp)
-- Browser controller: [code/esp32code/web_controller.html](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/web_controller.html)
-- Firmware docs: [code/esp32code/README.md](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/code/esp32code/README.md)
 
-## Build with PlatformIO
-(for mac)
-```bash
-python3 -m platformio run
-python3 -m platformio run --target upload --upload-port /dev/cu.usbmodem101
-python3 -m platformio device monitor -b 115200
-```
+---
 
-Board and libraries are defined in [platformio.ini](/Users/nirvaank/Code/Hardware/fallout/event/project/fallout-event-proj/platformio.ini).
+# What is FALL-E?
+
+FALL-E is a robot inspired by the pixar movie "WALL-E" and is meant to preserve soup and the legacy of the human species after the destruction of the world. It has a tank-drive chassis with two independent tracks(motor on each side).
+
+FALL-E features a Seeed Studio XIAO ESP32C3, 2 DC Motors, and a DRV8833 Motor Driver. 
+
+---
+
+# Why choose FALL-E?
+
+Our team went into this competition wanting to create something to protect soup and preserve humankind's legacy. We started brainstorming ideas that could do that. Ultimately, two avenues presented themselves: one giving soup wweaponry (like a turret) or giving it a form of transportation. We ultimately settled on a robot to keep soup company, protection and a form of transportation. We wanted to base it off of WALL-E because it too was exploring a barren, destroyed earth.
+
+
+---
+
+## Bill of materials
+
+- BOM: [bom.csv](bom.csv)
+
+
+---
+
+# IRL Pics
+
+
+![alt text](assets/images/irl/1.jpeg)
+![alt text](assets/images/irl/2.jpeg)
+![alt text](assets/images/irl/3.jpeg)
+
+
+---
+
+# Schematic/Wiring Diagram
+
+![alt text](assets/images/wiring.png)
+
+---
+
+# How to assemble it(with pics)?
+
+1. Gather your breadboard, wires, & electronic components.
+2. Wire the breadboard following the wiring diagram below:
+![alt text](assets/images/wiring.png)
+    a. You need to solder with solder & a soldering iron the microcontroller and it's header pins along with the dupont wires with the tt motors
+
+After you do so, the result should look like this:
+
+![alt text](assets/images/assembly/1.jpeg)
+![alt text](assets/images/assembly/2.jpeg)
+
+3. Next up is too make the body. For the main cube inside cut 6 17x17 cm squares 
+
+# How to use it?
+
+## Flash XIAO ESP32-C3
+
+1. Plug in the XIAO by USB-C.
+2. In `code/esp32code/main.cpp`, set:
+   ```cpp
+   constexpr char kWifiSsid[] = "YOUR_WIFI";
+   constexpr char kWifiPassword[] = "YOUR_PASSWORD";
+   ```
+3. Build:
+   ```bash
+   python3 -m platformio run
+   ```
+4. Flash:
+   ```bash
+   python3 -m platformio run --target upload --upload-port /dev/cu.usbmodem101
+   ```
+5. Open serial monitor:
+   ```bash
+   python3 -m platformio device monitor -b 115200
+   ```
+
+## Connect RC
+
+1. Read the IP from serial output.
+2. If Wi-Fi fails, connect to `FalloutESP32`.
+3. Open `code/esp32code/web_controller.html` in a browser.
+4. Connect to:
+   ```text
+   ws://XIAO_IP:3333/
+   ```
+   or fallback:
+   ```text
+   ws://192.168.4.1:3333/
+   ```
+5. Use the two joysticks to control left/right motors.

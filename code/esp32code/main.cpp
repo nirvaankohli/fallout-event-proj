@@ -27,11 +27,11 @@ struct MotorPins {
 // These pin pairs match the temporary bench-test sketch that already spun all four motors.
 constexpr MotorPins kLeftMotors[] = {
     {2, 3, false},
-    {4, 5, false},
+    {4, 5, true},
 };
 
 constexpr MotorPins kRightMotors[] = {
-    {20, 8, true},
+    {20, 8, false},
     {9, 10, true},
 };
 

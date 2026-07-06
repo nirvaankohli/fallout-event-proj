@@ -207,30 +207,33 @@
         <div class="status-row">
           <div class="pill"><span id="status-dot" class="dot disconnected"></span><span id="status-text">Disconnected</span></div>
           <div class="pill">Last status: <strong id="status-reason">idle</strong></div>
-          <div class="pill">Left: <strong id="left-readout">0</strong></div>
-          <div class="pill">Right: <strong id="right-readout">0</strong></div>
+          <div class="pill">Motor Left: <strong id="left-readout">0</strong></div>
+          <div class="pill">Motor Right: <strong id="right-readout">0</strong></div>
         </div>
 
         <p class="socket-help">
           Use <code>ws://192.168.4.1:3333/</code> when connected to the ESP's <code>FalloutESP32</code> Wi-Fi. If the board joins another Wi-Fi network, enter its printed IP here instead.
         </p>
+        <p class="socket-help">
+          Left pad is forward and reverse. Right pad is turn. Pushing the right pad up turns right by speeding up the left side and slowing down the right side.
+        </p>
       </section>
 
       <section class="controllers">
         <article class="joystick-card">
-          <h2>Left Motor</h2>
-          <div id="left-pad" class="pad" data-side="left">
+          <h2>Drive</h2>
+          <div id="left-pad" class="pad" data-side="drive">
             <div class="knob"></div>
           </div>
-          <div class="value">Command: <strong id="left-value">0</strong></div>
+          <div class="value">Drive: <strong id="left-value">0</strong></div>
         </article>
 
         <article class="joystick-card">
-          <h2>Right Motor</h2>
-          <div id="right-pad" class="pad" data-side="right">
+          <h2>Rotate</h2>
+          <div id="right-pad" class="pad" data-side="turn">
             <div class="knob"></div>
           </div>
-          <div class="value">Command: <strong id="right-value">0</strong></div>
+          <div class="value">Turn: <strong id="right-value">0</strong></div>
         </article>
       </section>
 
@@ -239,8 +242,10 @@
 
     <script>
       const state = {
-        left: 0,
-        right: 0,
+        drive: 0,
+        turn: 0,
+        leftMotor: 0,
+        rightMotor: 0,
         socket: null,
         pads: {},
         reconnectTimer: null,
@@ -250,7 +255,7 @@
       };
 
       const joystickDeadzone = 8;
-      const driveIntervalMs = 75;
+      const driveIntervalMs = 33;
       const defaultSocketUrl = "ws://192.168.4.1:3333/";
       const savedSocketUrlKey = "fallout-ws-url";
 
@@ -287,13 +292,25 @@
       }
 
       function updateReadouts() {
-        elements.leftValue.textContent = String(state.left);
-        elements.rightValue.textContent = String(state.right);
+        elements.leftValue.textContent = String(state.drive);
+        elements.rightValue.textContent = String(state.turn);
       }
 
       function updateStatusReadouts(left, right) {
         elements.leftReadout.textContent = String(left);
         elements.rightReadout.textContent = String(right);
+      }
+
+      function clampCommand(value) {
+        return Math.max(-100, Math.min(100, value));
+      }
+
+      function syncMixedOutputs() {
+        const mixedLeft = state.drive + state.turn;
+        const mixedRight = state.drive - state.turn;
+        const scale = Math.max(100, Math.abs(mixedLeft), Math.abs(mixedRight));
+        state.leftMotor = Math.round((mixedLeft / scale) * 100);
+        state.rightMotor = Math.round((mixedRight / scale) * 100);
       }
 
       function sendJson(payload) {
@@ -336,7 +353,8 @@
       }
 
       function sendDrive() {
-        sendJson({ type: "drive", left: state.left, right: state.right });
+        syncMixedOutputs();
+        sendJson({ type: "drive", left: state.leftMotor, right: state.rightMotor });
       }
 
       function startDriveTimer() {
@@ -347,8 +365,9 @@
       }
 
       function stopAll() {
-        state.left = 0;
-        state.right = 0;
+        state.drive = 0;
+        state.turn = 0;
+        syncMixedOutputs();
         updateReadouts();
         centerAllPads();
         sendJson({ type: "stop" });
@@ -444,13 +463,14 @@
 
         const normalized = Math.round((-clampedY / limit) * 100);
         const clamped = Math.max(-100, Math.min(100, normalized));
-        state[side] = Math.abs(clamped) <= joystickDeadzone ? 0 : clamped;
+        state[side] = Math.abs(clamped) <= joystickDeadzone ? 0 : clampCommand(clamped);
         updateReadouts();
         sendDrive();
       }
 
       function releaseSide(side) {
         state[side] = 0;
+        syncMixedOutputs();
         updateReadouts();
         centerPad(side);
         sendDrive();
@@ -504,9 +524,10 @@
         }
       });
 
-      bindPad("left", "left-pad");
-      bindPad("right", "right-pad");
+      bindPad("drive", "left-pad");
+      bindPad("turn", "right-pad");
       elements.wsUrl.value = deriveDefaultSocketUrl();
+      syncMixedOutputs();
       updateReadouts();
       updateStatusReadouts(0, 0);
       connectWebSocket();
