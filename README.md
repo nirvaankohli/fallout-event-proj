@@ -61,7 +61,11 @@ After you do so, the result should look like this:
 ![alt text](assets/images/assembly/1.jpeg)
 ![alt text](assets/images/assembly/2.jpeg)
 
-3. Next up is too make the body. For the main cube inside cut 6 17x17 cm squares 
+3. Next up is too make the body. For the main cube inside cut 6 17x17 cm squares. 
+    a. Hot Glue 5 of these squares together to make a cube without a side. 
+    b. Cut two rectangular shaoed holes around 3cm away from each other in the middle.
+    c. 3D Print `CAD/part2.stl`and from the inside of the cube force it up:
+    
 
 # How to use it?
 
