@@ -8,16 +8,16 @@ This folder contains the firmware and browser controller for a four-motor tank-d
 
 ## Pin mapping
 
-This firmware now fans each left/right drive command out to two motors per side:
+This firmware fans each left/right drive command out to two motors per side using the bench-tested wiring from the temporary motor-spin sketch:
 
-- `Left front motor IN1` -> `D0`
-- `Left front motor IN2` -> `D1`
-- `Right front motor IN1` -> `D2`
-- `Right front motor IN2` -> `D3`
-- `Left rear motor IN1` -> `GPIO10`
-- `Left rear motor IN2` -> `GPIO9`
-- `Right rear motor IN1` -> `GPIO8`
-- `Right rear motor IN2` -> `GPIO7` (`D5` on the XIAO ESP32-C3)
+- `Left front motor IN1` -> `GPIO2`
+- `Left front motor IN2` -> `GPIO3`
+- `Right front motor IN1` -> `GPIO4`
+- `Right front motor IN2` -> `GPIO5`
+- `Left rear motor IN1` -> `GPIO20`
+- `Left rear motor IN2` -> `GPIO8`
+- `Right rear motor IN1` -> `GPIO9`
+- `Right rear motor IN2` -> `GPIO10`
 
 Each side is controlled independently:
 
@@ -26,11 +26,11 @@ Each side is controlled independently:
 
 DRV8833 drive behavior for each motor channel:
 
-- Forward: PWM on `IN1`, `IN2=LOW`
-- Reverse: `IN1=LOW`, PWM on `IN2`
+- Forward: `IN1=HIGH`, `IN2=LOW`
+- Reverse: `IN1=LOW`, `IN2=HIGH`
 - Stop/coast: both inputs `LOW`
 
-Command magnitude still uses `-100..100`, and the firmware converts that to PWM duty cycle for variable speed.
+Command magnitude still uses `-100..100`, but the current firmware treats any non-zero value as a full-speed direction command.
 
 ## Wi-Fi flow
 
@@ -85,10 +85,15 @@ help
 ## Safety stop
 
 - The firmware stops motors by driving all H-bridge inputs `LOW`.
-- Because `GPIO10` is now used as a motor control pin, `SLEEP` is not MCU-controlled in firmware.
+- `SLEEP` is not MCU-controlled in firmware.
 - Invalid WebSocket payloads force a safe stop.
 - If joystick updates stop arriving for about `300 ms`, all four motors are stopped automatically.
 - If the WebSocket client disconnects, all four motors are stopped automatically.
+
+## Startup behavior
+
+- On boot, all four motors spin forward together for about `0.5 s`.
+- After that startup check, the firmware stops the motors and starts Wi-Fi/WebSocket control.
 
 ## Browser controller
 

@@ -58,6 +58,9 @@
         position: absolute;
         top: 0;
         right: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
 
       input,
@@ -66,7 +69,12 @@
       }
 
       input {
-        display: none;
+        min-width: min(48vw, 280px);
+        border: 1px solid rgba(23, 53, 58, 0.22);
+        border-radius: 999px;
+        padding: 8px 12px;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.78);
       }
 
       button {
@@ -167,6 +175,12 @@
         font-size: 0.95rem;
       }
 
+      .socket-help {
+        margin-top: 10px;
+        color: rgba(23, 53, 58, 0.72);
+        font-size: 0.92rem;
+      }
+
       @media (max-width: 760px) {
         .controllers {
           grid-template-columns: 1fr;
@@ -174,6 +188,7 @@
 
         .connection {
           position: static;
+          flex-wrap: wrap;
         }
       }
     </style>
@@ -195,6 +210,10 @@
           <div class="pill">Left: <strong id="left-readout">0</strong></div>
           <div class="pill">Right: <strong id="right-readout">0</strong></div>
         </div>
+
+        <p class="socket-help">
+          Use <code>ws://192.168.4.1:3333/</code> when connected to the ESP's <code>FalloutESP32</code> Wi-Fi. If the board joins another Wi-Fi network, enter its printed IP here instead.
+        </p>
       </section>
 
       <section class="controllers">
@@ -232,6 +251,8 @@
 
       const joystickDeadzone = 8;
       const driveIntervalMs = 75;
+      const defaultSocketUrl = "ws://192.168.4.1:3333/";
+      const savedSocketUrlKey = "fallout-ws-url";
 
       const elements = {
         wsUrl: document.getElementById("ws-url"),
@@ -249,6 +270,20 @@
         elements.statusDot.className = `dot ${connected ? "connected" : "disconnected"}`;
         elements.statusText.textContent = connected ? "Connected" : "Disconnected";
         elements.statusReason.textContent = message;
+      }
+
+      function deriveDefaultSocketUrl() {
+        const savedUrl = window.localStorage.getItem(savedSocketUrlKey);
+        if (savedUrl) {
+          return savedUrl;
+        }
+
+        if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+          const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+          return `${protocol}//${window.location.hostname}:3333/`;
+        }
+
+        return defaultSocketUrl;
       }
 
       function updateReadouts() {
@@ -327,10 +362,16 @@
         }
 
         const url = elements.wsUrl.value.trim();
+        if (!url) {
+          setConnectionState(false, "missing websocket url");
+          return;
+        }
+
+        window.localStorage.setItem(savedSocketUrlKey, url);
         const socket = new WebSocket(url);
         state.socket = socket;
         clearReconnectTimer();
-        setConnectionState(false, "connecting");
+        setConnectionState(false, `connecting to ${url}`);
 
         socket.addEventListener("open", () => {
           setConnectionState(true, "connected");
@@ -346,12 +387,12 @@
         socket.addEventListener("close", () => {
           clearDriveTimer();
           clearKeepaliveTimer();
-          setConnectionState(false, "socket closed");
+          setConnectionState(false, `socket closed (${url})`);
           scheduleReconnect();
         });
 
         socket.addEventListener("error", () => {
-          setConnectionState(false, "socket error");
+          setConnectionState(false, `socket error (${url})`);
         });
 
         socket.addEventListener("message", (event) => {
@@ -465,6 +506,7 @@
 
       bindPad("left", "left-pad");
       bindPad("right", "right-pad");
+      elements.wsUrl.value = deriveDefaultSocketUrl();
       updateReadouts();
       updateStatusReadouts(0, 0);
       connectWebSocket();

@@ -9,32 +9,30 @@ constexpr uint32_t kBaudRate = 115200;
 constexpr uint16_t kWebSocketPort = 3333;
 constexpr uint32_t kCommandTimeoutMs = 300;
 constexpr int kCommandDeadzone = 8;
+constexpr int kBootMotorSpinCommand = 100;
+constexpr uint32_t kBootMotorSpinMs = 500;
 constexpr char kWifiSsid[] = "Nirvaan's Phone";
 constexpr char kWifiPassword[] = "himynameisnirvaan";
 constexpr char kFallbackAccessPointSsid[] = "FalloutESP32";
 constexpr uint8_t kFallbackAccessPointChannel = 6;
 constexpr uint8_t kActivityLedPin = 255;
 constexpr uint8_t kSleepPin = 255;
-constexpr uint32_t kBootMotorTestStepMs = 700;
-constexpr bool kRunBootMotorTest = false;
-constexpr bool kInvertLeftMotor = true;
-constexpr bool kInvertRightMotor = false;
-constexpr uint8_t kPwmMaxDuty = 255;
 
 struct MotorPins {
   uint8_t in1Pin;
   uint8_t in2Pin;
+  bool invertDirection;
 };
 
-// The second driver is mapped with raw GPIO numbers so it lands on GPIO10/9/8/7 exactly.
+// These pin pairs match the temporary bench-test sketch that already spun all four motors.
 constexpr MotorPins kLeftMotors[] = {
-    {D0, D1},
-    {10, 9},
+    {2, 3, false},
+    {4, 5, false},
 };
 
 constexpr MotorPins kRightMotors[] = {
-    {D2, D3},
-    {8, 7},
+    {20, 8, true},
+    {9, 10, true},
 };
 
 IPAddress kFallbackAccessPointIp(192, 168, 4, 1);
@@ -87,6 +85,7 @@ void setDriverSleep(bool enabled) {
   if (kSleepPin == 255) {
     return;
   }
+
   digitalWrite(kSleepPin, enabled ? HIGH : LOW);
 }
 
@@ -94,37 +93,29 @@ void setActivityLed(bool enabled) {
   if (kActivityLedPin == 255) {
     return;
   }
+
   digitalWrite(kActivityLedPin, enabled ? HIGH : LOW);
 }
 
-uint8_t commandToDutyCycle(int command) {
-  return static_cast<uint8_t>(map(abs(command), 0, 100, 0, kPwmMaxDuty));
-}
-
 void stopMotorPins(uint8_t in1Pin, uint8_t in2Pin) {
-  analogWrite(in1Pin, 0);
-  analogWrite(in2Pin, 0);
   digitalWrite(in1Pin, LOW);
   digitalWrite(in2Pin, LOW);
 }
 
 void applyMotorPins(uint8_t in1Pin, uint8_t in2Pin, int command) {
-  const uint8_t dutyCycle = commandToDutyCycle(command);
-  if (dutyCycle == 0) {
-    stopMotorPins(in1Pin, in2Pin);
-    return;
-  }
-
   if (command > 0) {
-    analogWrite(in2Pin, 0);
+    digitalWrite(in1Pin, HIGH);
     digitalWrite(in2Pin, LOW);
-    analogWrite(in1Pin, dutyCycle);
     return;
   }
 
-  analogWrite(in1Pin, 0);
-  digitalWrite(in1Pin, LOW);
-  analogWrite(in2Pin, dutyCycle);
+  if (command < 0) {
+    digitalWrite(in1Pin, LOW);
+    digitalWrite(in2Pin, HIGH);
+    return;
+  }
+
+  stopMotorPins(in1Pin, in2Pin);
 }
 
 void stopMotor(const MotorPins &motor) {
@@ -132,21 +123,23 @@ void stopMotor(const MotorPins &motor) {
 }
 
 void applyMotor(const MotorPins &motor, int command) {
-  applyMotorPins(motor.in1Pin, motor.in2Pin, command);
+  const int adjustedCommand = motor.invertDirection ? -command : command;
+  applyMotorPins(motor.in1Pin, motor.in2Pin, adjustedCommand);
+}
+
+template <size_t N>
+void applyMotorBank(const MotorPins (&motors)[N], int command) {
+  for (const MotorPins &motor : motors) {
+    applyMotor(motor, command);
+  }
 }
 
 void applyLeftMotors(int command) {
-  const int normalizedCommand = kInvertLeftMotor ? -command : command;
-  for (const MotorPins &motor : kLeftMotors) {
-    applyMotor(motor, normalizedCommand);
-  }
+  applyMotorBank(kLeftMotors, command);
 }
 
 void applyRightMotors(int command) {
-  const int normalizedCommand = kInvertRightMotor ? -command : command;
-  for (const MotorPins &motor : kRightMotors) {
-    applyMotor(motor, normalizedCommand);
-  }
+  applyMotorBank(kRightMotors, command);
 }
 
 String buildStatusJson(const char *reason = nullptr) {
@@ -219,30 +212,29 @@ void applyDriveCommand(int left, int right, const char *source) {
                 anyMotorActive ? "HIGH" : "LOW");
 }
 
+template <size_t N>
+void configureMotorBank(const MotorPins (&motors)[N]) {
+  for (const MotorPins &motor : motors) {
+    pinMode(motor.in1Pin, OUTPUT);
+    pinMode(motor.in2Pin, OUTPUT);
+    stopMotor(motor);
+  }
+}
+
 void configureMotorPins() {
-  for (const MotorPins &motor : kLeftMotors) {
-    pinMode(motor.in1Pin, OUTPUT);
-    pinMode(motor.in2Pin, OUTPUT);
-    stopMotor(motor);
-  }
-  for (const MotorPins &motor : kRightMotors) {
-    pinMode(motor.in1Pin, OUTPUT);
-    pinMode(motor.in2Pin, OUTPUT);
-    stopMotor(motor);
-  }
-  if (kActivityLedPin != 255) {
-    pinMode(kActivityLedPin, OUTPUT);
-  }
-  if (kSleepPin != 255) {
-    pinMode(kSleepPin, OUTPUT);
-  }
+  configureMotorBank(kLeftMotors);
+  configureMotorBank(kRightMotors);
 
   if (kActivityLedPin != 255) {
+    pinMode(kActivityLedPin, OUTPUT);
     digitalWrite(kActivityLedPin, LOW);
   }
+
   if (kSleepPin != 255) {
+    pinMode(kSleepPin, OUTPUT);
     digitalWrite(kSleepPin, LOW);
   }
+
   motorState.left = 0;
   motorState.right = 0;
   motorState.lastCommandAtMs = 0;
@@ -250,24 +242,11 @@ void configureMotorPins() {
 }
 
 void runBootMotorTest() {
-  if (!kRunBootMotorTest) {
-    Serial.println("[boot] Motor self-test disabled");
-    return;
-  }
-
-  Serial.println("[boot] Running motor self-test");
-
-  applyDriveCommand(100, 0, "boot-left");
-  delay(kBootMotorTestStepMs);
-  stopAllMotors("boot-left-stop");
-  delay(250);
-
-  applyDriveCommand(0, 100, "boot-right");
-  delay(kBootMotorTestStepMs);
-  stopAllMotors("boot-right-stop");
-  delay(250);
-
-  Serial.println("[boot] Motor self-test complete");
+  Serial.println("[boot] Running startup motor spin");
+  applyDriveCommand(kBootMotorSpinCommand, kBootMotorSpinCommand, "boot-spin");
+  delay(kBootMotorSpinMs);
+  stopAllMotors("boot-spin-complete");
+  Serial.println("[boot] Startup motor spin complete");
 }
 
 void printHelp(Stream &stream) {
