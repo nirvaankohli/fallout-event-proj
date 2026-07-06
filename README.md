@@ -6,14 +6,14 @@
 
 # The Problem
 
-So the world is ending on the 7th of July and the human species may not survive. Soup, however can survive the incoming apocalypse, but only with help. Soup needs a companion to accompany itself(as soup can't walk) to preserve the legacy of humankind for the next species to rule earth.
+So the world is ending on the 7th of July, and the human species may not survive. Soup, however, can survive the incoming apocalypse, but only with help. Soup needs a companion to accompany itself(as soup can't walk) to preserve the legacy of humankind for the next species to rule Earth.
 
 
 ---
 
 # What is FALL-E?
 
-FALL-E is a robot inspired by the pixar movie "WALL-E" and is meant to preserve soup and the legacy of the human species after the destruction of the world. It has a tank-drive chassis with two independent tracks(motor on each side).
+FALL-E is a robot inspired by the Pixar movie "WALL-E" and is meant to preserve soup and the legacy of the human species after the destruction of the world. It has a tank-drive chassis with two independent tracks(motor on each side).
 
 FALL-E features a Seeed Studio XIAO ESP32C3, 2 DC Motors, and a DRV8833 Motor Driver. 
 
@@ -21,7 +21,13 @@ FALL-E features a Seeed Studio XIAO ESP32C3, 2 DC Motors, and a DRV8833 Motor Dr
 
 # Why choose FALL-E?
 
-Our team went into this competition wanting to create something to protect soup and preserve humankind's legacy. We started brainstorming ideas that could do that. Ultimately, two avenues presented themselves: one giving soup wweaponry (like a turret) or giving it a form of transportation. We ultimately settled on a robot to keep soup company, protection and a form of transportation. We wanted to base it off of WALL-E because it too was exploring a barren, destroyed earth.
+Our team went into this competition wanting to create something to protect soup and preserve humankind's legacy. We started brainstorming ideas that could do that. Ultimately, two avenues presented themselves: one giving soup weaponry (like a turret) or giving it a form of transportation. We ultimately settled on a robot to keep soup company, provide protection, and a form of transportation. We wanted to base it off of WALL-E because it too was exploring a barren, destroyed Earth.
+
+
+---
+
+# Zine
+ <img width="1410" height="2000" alt="Zine (8)" src="https://github.com/user-attachments/assets/9c00967e-2489-417f-8da0-33b4d12d79e0" />
 
 
 ---
